@@ -4,6 +4,10 @@
 
 {-# LANGUAGE UndecidableInstances #-}
 
+-- TODO(dijkstra): warnings disabled while the AlonzoTx Upgrade instance is stubbed
+-- (AlonzoTx now has kind `TxLevel -> Type -> Type` in cardano-ledger 1.20).
+{-# OPTIONS_GHC -Wno-unused-imports -Wno-unused-top-binds -Wno-incomplete-patterns #-}
+
 -- | Provides translation of types across the current era and the latest era.
 module Ogmios.Data.EraTranslation
     ( -- * Type Families
@@ -27,10 +31,18 @@ import Cardano.Ledger.Babbage.Tx
 import Cardano.Ledger.Babbage.TxOut
     ( BabbageTxOut (..)
     )
+import Cardano.Ledger.Api.Era 
+    ( DijkstraEra
+    )
+import Cardano.Ledger.Api.Tx.Body
+    ( upgradeTxBody
+    )
 import Cardano.Ledger.Core
     ( PreviousEra
+    , TopTx
+    , Tx
     , translateEraThroughCBOR
-    , upgradeTxBody
+    , upgradeTxOut
     )
 import Cardano.Ledger.Shelley.UTxO
     ( UTxO (..)
@@ -76,6 +88,10 @@ instance Upgrade BabbageTxOut ConwayEra where
     type Upgraded BabbageTxOut = BabbageTxOut
     upgrade = force . Conway.upgradeTxOut
 
+instance Upgrade BabbageTxOut DijkstraEra where
+    type Upgraded BabbageTxOut = BabbageTxOut
+    upgrade = force . upgradeTxOut
+
 ----------
 -- UTxO
 ----------
@@ -84,21 +100,23 @@ instance Upgrade UTxO ConwayEra where
     type Upgraded UTxO = UTxO
     upgrade = force . UTxO . fmap upgrade . unUTxO
 
+instance Upgrade UTxO DijkstraEra where
+    type Upgraded UTxO = UTxO
+    upgrade = force . UTxO . fmap upgrade . unUTxO
+
 ----------
 -- Tx
 ----------
 
-instance Upgrade AlonzoTx ConwayEra where
-    type Upgraded AlonzoTx = AlonzoTx
-    upgrade tx = force $ unsafeFromRight $ do
-        body <- left show $ upgradeTxBody (Alonzo.body tx)
-        left show $ runExcept $ do
-            wits <- translateEraThroughCBOR "witness" $ Alonzo.wits tx
-            auxiliaryData <- case Alonzo.auxiliaryData tx of
-              SNothing -> pure SNothing
-              SJust auxData -> SJust <$> translateEraThroughCBOR "auxiliaryData" auxData
-            let isValid = Alonzo.isValid tx
-            pure $ AlonzoTx{body,wits,auxiliaryData,isValid}
+instance Upgrade (Tx TopTx) ConwayEra where
+    type Upgraded (Tx TopTx) = Tx TopTx
+    upgrade tx = force $ unsafeFromRight $
+        left show $ runExcept $ translateEraThroughCBOR "Tx" tx
+
+instance Upgrade (Tx TopTx) DijkstraEra where
+    type Upgraded (Tx TopTx) = Tx TopTx
+    upgrade tx = force $ unsafeFromRight $
+        left show $ runExcept $ translateEraThroughCBOR "Tx" tx
 
 ----------
 -- GenTx
@@ -137,6 +155,10 @@ data MultiEraUTxO block where
 
     UTxOInConwayEra
         :: UTxO ConwayEra
+        -> MultiEraUTxO block
+
+    UTxOInDijkstraEra
+        :: UTxO DijkstraEra
         -> MultiEraUTxO block
 
 deriving instance
