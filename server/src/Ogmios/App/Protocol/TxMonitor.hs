@@ -73,7 +73,8 @@ import Ogmios.Data.Protocol.TxMonitor
     , TxMonitorMessage (..)
     )
 import Ouroboros.Consensus.Cardano.Block
-    ( TxId (..)
+    ( DijkstraEra
+    , TxId (..)
     )
 import Ouroboros.Consensus.Ledger.SupportsMempool
     ( HasTxId (..)
@@ -202,18 +203,19 @@ mkTxMonitorClient defaultWithInternalError TxMonitorCodecs{..} queue yield nodeT
 
 inMultipleEras
     :: forall crypto constraint.
-        ( constraint ~ (MostRecentEra (CardanoBlock crypto) ~ ConwayEra)
+        ( constraint ~ (MostRecentEra (CardanoBlock crypto) ~ DijkstraEra)
         )
     => NodeToClientVersion
     -> Ledger.TxId
     -> [GenTxId (CardanoBlock crypto)]
 inMultipleEras nodeToClientV id =
-    -- The list is ordered from the "most probable era", down to the least
-    -- probable. This hopefully ensures that we do a minimum number of loops
-    -- for the happy path.
+-- The list is ordered from the "most probable era", down to the least
+-- probable. This hopefully ensures that we do a minimum number of loops
+-- for the happy path.
     GenTxIdBabbage (ShelleyTxId id) :
         if nodeToClientV >= NodeToClientV_16 then
-            [ GenTxIdConway (ShelleyTxId id)
+            [ GenTxIdDijkstra (ShelleyTxId id)
+            , GenTxIdConway (ShelleyTxId id)
             , GenTxIdAlonzo (ShelleyTxId id)
             , GenTxIdMary (ShelleyTxId id)
             ]

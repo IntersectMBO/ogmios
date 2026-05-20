@@ -44,6 +44,9 @@ import Ogmios.Prelude
 import Cardano.Ledger.Alonzo.TxBody
     ( AlonzoEraTxBody (..)
     )
+import Cardano.Ledger.Api.Era
+    ( DijkstraEra
+    )
 import Cardano.Ledger.Babbage.TxBody
     ( BabbageEraTxBody (..)
     )
@@ -53,6 +56,7 @@ import Cardano.Ledger.BaseTypes
 import Cardano.Ledger.Core
     ( EraTx (..)
     , EraTxBody (..)
+    , TopTx
     , eraName
     )
 import Control.Monad.Trans.Except
@@ -313,6 +317,7 @@ newExecutionUnitsEvaluator
         , crypto ~ StandardCrypto
         , CanEvaluateScriptsInEra BabbageEra
         , CanEvaluateScriptsInEra ConwayEra
+        , CanEvaluateScriptsInEra DijkstraEra
         , ConvertRawTxId (GenTx (CardanoBlock crypto))
         )
     => Logger TraceTxSubmission
@@ -358,6 +363,10 @@ newExecutionUnitsEvaluator tr = do
                     logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "babbage", transactionEra = "conway" }
                     return $ Right (SomeEvaluationInAnyEra (upgrade utxo) tx)
 
+                (UTxOInBabbageEra utxo, GenTxDijkstra (ShelleyTx _id tx)) -> do
+                    logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "babbage", transactionEra = "dijkstra" }
+                    return $ Right (SomeEvaluationInAnyEra (upgrade $ upgrade utxo) tx)
+
                 (UTxOInConwayEra utxo, GenTxBabbage (ShelleyTx _id tx)) -> do
                     logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "conway", transactionEra = "babbage" }
                     return $ Right (SomeEvaluationInAnyEra utxo (upgrade tx))
@@ -365,6 +374,24 @@ newExecutionUnitsEvaluator tr = do
                 (UTxOInConwayEra utxo, GenTxConway (ShelleyTx _id tx)) -> do
                     logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "conway", transactionEra = "conway" }
                     return $ Right (SomeEvaluationInAnyEra utxo tx)
+                 
+                (UTxOInConwayEra utxo, GenTxDijkstra (ShelleyTx _id tx)) -> do
+                    logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "conway", transactionEra = "dijkstra" } 
+                    return $ Right (SomeEvaluationInAnyEra (upgrade utxo)  tx)
+
+                (UTxOInDijkstraEra utxo, GenTxDijkstra (ShelleyTx _id tx)) -> do
+                    logWith tr (TxSubmissionEvaluateArguments { utxoEra = "dijkstra", transactionEra = "dijkstra" }) 
+                    return $ Right (SomeEvaluationInAnyEra utxo tx)
+                    
+                (UTxOInDijkstraEra utxo, GenTxBabbage (ShelleyTx _id tx)) -> do
+                    logWith tr (TxSubmissionEvaluateArguments { utxoEra = "dijkstra", transactionEra = "babbage" }) 
+                    return $ Right (SomeEvaluationInAnyEra utxo (upgrade $ upgrade tx))   
+
+                (UTxOInDijkstraEra utxo, GenTxConway (ShelleyTx _id tx)) -> do
+                    logWith tr (TxSubmissionEvaluateArguments { utxoEra = "dijkstra", transactionEra = "conway" }) 
+                    return $ Right (SomeEvaluationInAnyEra utxo (upgrade tx))
+
+
 
             , readMempoolM = do
                 logWith tr TxSubmissionLocalMempoolTryRead
@@ -465,8 +492,10 @@ newExecutionUnitsEvaluator tr = do
                     (clientStAcquired0 @_ @BabbageEra args evaluateExecutionUnits)
                     -- Conway
                     (clientStAcquired0 @_ @ConwayEra args evaluateExecutionUnits)
+                    -- Dijkstra
+                    (clientStAcquired0 @_ @DijkstraEra args evaluateExecutionUnits)
                 , LSQ.recvMsgFailure =
-                    const $ pure $ LSQ.SendMsgAcquire VolatileTip (clientStAcquiring args)
+                    const $ pure $ LSQ.SendMsgAcquire VolatileTip (clientStAcquiring args) 
                 }
 
         reAcquire
@@ -482,7 +511,7 @@ newExecutionUnitsEvaluator tr = do
                -> SystemStart
                -> EpochInfo (Except PastHorizonException)
                -> UTxO era
-               -> Tx era
+               -> Tx TopTx era
                -> EvaluateTransactionResponse block
                )
             -> HoistQuery proto era
@@ -503,7 +532,7 @@ newExecutionUnitsEvaluator tr = do
             -> (  SystemStart
                -> EpochInfo (Except PastHorizonException)
                -> UTxO era
-               -> Tx era
+               -> Tx TopTx era
                -> EvaluateTransactionResponse block
                )
             -> HoistQuery proto era
@@ -520,7 +549,7 @@ newExecutionUnitsEvaluator tr = do
             => SomeEvaluationInAnyEra
             -> (  EpochInfo (Except PastHorizonException)
                -> UTxO era
-               -> Tx era
+               -> Tx TopTx era
                -> EvaluateTransactionResponse block
                )
             -> HoistQuery proto era
@@ -536,7 +565,7 @@ newExecutionUnitsEvaluator tr = do
             :: forall proto era. (CanEvaluateScriptsInEra era)
             => SomeEvaluationInAnyEra
             -> (  UTxO era
-               -> Tx era
+               -> Tx TopTx era
                -> EvaluateTransactionResponse block
                )
             -> HoistQuery proto era
@@ -558,7 +587,7 @@ type HoistQuery proto era =
         => BlockQuery (ShelleyBlock (proto crypto) era) qf r
         -> BlockQuery (CardanoBlock crypto) qf a
 
--- | Run local-state queries in either Babbage or Conway depending on where the network is at.
+-- | Run local-state queries in either Babbage, Conway or Dijkstra depending on where the network is at.
 --
 -- This is crucial to allow the server to *dynamically* switch to the right era after the hard-fork.
 selectEra
@@ -578,19 +607,22 @@ selectEra
     -- Selector for the Babbage era.
     -> ( HoistQuery Praos ConwayEra -> LSQ.ClientStAcquired block (Point block) (Query block) m ()
        )
-
+    -- Selector for the Dijkstra era.
+    -> ( HoistQuery Praos DijkstraEra -> LSQ.ClientStAcquired block (Point block) (Query block) m ()
+       )
     -> LSQ.ClientStAcquired block (Point block) (Query block) m ()
-selectEra fallback asBabbage asConway =
+selectEra fallback asBabbage asConway asDijkstra =
     LSQ.SendMsgQuery (Ledger.BlockQuery $ HF.QueryHardFork HF.GetCurrentEra) $
     LSQ.ClientStQuerying
         { LSQ.recvMsgResult = \case
-            EraIndex                   Z{}       -> fallback "Byron"
-            EraIndex                (S Z{})      -> fallback "Shelley"
-            EraIndex             (S (S Z{}))     -> fallback "Allegra"
-            EraIndex          (S (S (S Z{})))    -> fallback "Mary"
-            EraIndex       (S (S (S (S Z{}))))   -> fallback "Alonzo"
-            EraIndex    (S (S (S (S (S Z{})))))  -> pure (asBabbage QueryIfCurrentBabbage)
-            EraIndex (S (S (S (S (S (S Z{})))))) -> pure (asConway QueryIfCurrentConway)
+            EraIndex                       Z{}        -> fallback "Byron"
+            EraIndex                    (S Z{})       -> fallback "Shelley"
+            EraIndex                 (S (S Z{}))      -> fallback "Allegra"
+            EraIndex              (S (S (S Z{})))     -> fallback "Mary"
+            EraIndex           (S (S (S (S Z{}))))    -> fallback "Alonzo"
+            EraIndex        (S (S (S (S (S Z{})))))   -> pure (asBabbage QueryIfCurrentBabbage)
+            EraIndex     (S (S (S (S (S (S Z{}))))))  -> pure (asConway QueryIfCurrentConway)
+            EraIndex  (S (S (S (S (S (S (S Z{}))))))) -> pure (asDijkstra QueryIfCurrentDijkstra)
         }
 
 --
@@ -601,7 +633,7 @@ data SomeEvaluationInAnyEra where
     SomeEvaluationInAnyEra
         :: forall era. (CanEvaluateScriptsInEra era)
         => !(UTxO era)
-        -> !(Tx era)
+        -> !(Tx TopTx era)
         -> SomeEvaluationInAnyEra
 
 -- | Return all unspent transaction outputs needed for evaluation. This includes
@@ -620,7 +652,7 @@ newEvaluateTransactionResponse
     :: forall era result.
         ( CanEvaluateScriptsInEra era
         )
-    => (UTxO era -> Tx era -> result)
+    => (UTxO era -> Tx TopTx era -> result)
     -> (EvaluateTransactionError -> result)
     -> UTxO era -- ^ Utxo fetched from the network
     -> SomeEvaluationInAnyEra -- ^ Tx & additional utxo
@@ -666,7 +698,7 @@ translateToNetworkEra
         ( CanEvaluateScriptsInEra eraNetwork
         )
     => SomeEvaluationInAnyEra
-    -> Maybe (UTxO eraNetwork, Tx eraNetwork)
+    -> Maybe (UTxO eraNetwork, Tx TopTx eraNetwork)
 translateToNetworkEra (SomeEvaluationInAnyEra utxoOrig txOrig) =
     translate utxoOrig txOrig
   where
@@ -675,8 +707,8 @@ translateToNetworkEra (SomeEvaluationInAnyEra utxoOrig txOrig) =
             ( CanEvaluateScriptsInEra eraArgs
             )
         => UTxO eraArgs
-        -> Tx eraArgs
-        -> Maybe (UTxO eraNetwork, Tx eraNetwork)
+        -> Tx TopTx eraArgs
+        -> Maybe (UTxO eraNetwork, Tx TopTx eraNetwork)
     translate utxo tx =
         let
             eraNetwork = typeRep @eraNetwork
@@ -694,7 +726,8 @@ translateToNetworkEra (SomeEvaluationInAnyEra utxoOrig txOrig) =
             babbageToConway =
                 case (testEquality eraNetwork eraConway, testEquality eraArgs eraBabbage) of
                     (Just Refl, Just Refl) -> do
-                        Just (upgrade utxo, upgrade tx)
+                        -- TODO(dijkstra): Tx TopTx Upgrade instance commented out in EraTranslation.hs; tx upgrade stubbed.
+                        Just (upgrade utxo, error "TODO(dijkstra): Babbage→Conway Tx upgrade")
                     _ ->
                         Nothing
           in
