@@ -27,6 +27,7 @@ import qualified Ogmios.Data.Json.Allegra as Allegra
 import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Conway as Conway
+import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
 import qualified Ogmios.Data.Json.Mary as Mary
 import qualified Ogmios.Data.Json.Shelley as Shelley
 
@@ -1027,6 +1028,8 @@ encodeTxOutInAnyEra = encodeObject . \case
         Babbage.encodeTxOut includeAllCbor out
     TxOutInAnyEra (ShelleyBasedEraConway, out) ->
         Babbage.encodeTxOut includeAllCbor out
+    TxOutInAnyEra (ShelleyBasedEraDijkstra, out) ->
+        Dijkstra.encodeTxOut includeAllCbor out
 
 encodeValueInAnyEra :: ValueInAnyEra -> Json
 encodeValueInAnyEra = \case
@@ -1042,6 +1045,8 @@ encodeValueInAnyEra = \case
         Mary.encodeValue value
     ValueInAnyEra (ShelleyBasedEraConway, value) ->
         Mary.encodeValue value
+    ValueInAnyEra (ShelleyBasedEraDijkstra, value) ->
+        Mary.encodeValue value
 
 encodeScriptPurposeItemInAnyEra
     :: ScriptPurposeItemInAnyEra
@@ -1053,6 +1058,8 @@ encodeScriptPurposeItemInAnyEra = \case
         Alonzo.encodeScriptPurposeItem purpose
     ScriptPurposeItemInAnyEra (AlonzoBasedEraConway, purpose) ->
         SJust (Conway.encodeScriptPurposeItem purpose)
+    ScriptPurposeItemInAnyEra (AlonzoBasedEraDijkstra, purpose) ->
+        SJust (Dijkstra.encodeScriptPurposeItem purpose)
 
 encodeScriptPurposeIndexInAnyEra
     :: ScriptPurposeIndexInAnyEra
@@ -1064,6 +1071,8 @@ encodeScriptPurposeIndexInAnyEra = \case
         Alonzo.encodeScriptPurposeIndex purpose
     ScriptPurposeIndexInAnyEra (AlonzoBasedEraConway, purpose) ->
         Conway.encodeScriptPurposeIndex purpose
+    ScriptPurposeIndexInAnyEra (AlonzoBasedEraDijkstra, purpose) ->
+        Dijkstra.encodeScriptPurposeIndex purpose
 
 encodeContextErrorInAnyEra
     :: ContextErrorInAnyEra
@@ -1075,6 +1084,8 @@ encodeContextErrorInAnyEra = \case
         Babbage.encodeContextError err
     ContextErrorInAnyEra (AlonzoBasedEraConway, err) ->
         Conway.encodeContextError err
+    ContextErrorInAnyEra (AlonzoBasedEraDijkstra, err) ->
+        Dijkstra.encodeContextError err
 
 encodeDiscriminatedEntities
     :: DiscriminatedEntities
