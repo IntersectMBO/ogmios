@@ -65,6 +65,7 @@ library
       Ogmios.Data.Json.Babbage
       Ogmios.Data.Json.Byron
       Ogmios.Data.Json.Conway
+      Ogmios.Data.Json.Dijkstra
       Ogmios.Data.Json.Ledger.PredicateFailure
       Ogmios.Data.Json.Ledger.ScriptFailure
       Ogmios.Data.Json.Mary
