@@ -73,8 +73,7 @@ import Ogmios.Data.Protocol.TxMonitor
     , TxMonitorMessage (..)
     )
 import Ouroboros.Consensus.Cardano.Block
-    ( DijkstraEra
-    , TxId (..)
+    ( TxId (..)
     )
 import Ouroboros.Consensus.Ledger.SupportsMempool
     ( HasTxId (..)

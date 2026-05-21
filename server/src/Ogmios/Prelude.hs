@@ -55,6 +55,7 @@ module Ogmios.Prelude
     , CardanoEras
     , CardanoBlock
     , ConwayEra
+    , DijkstraEra
     , Era
     , MaryEra
     , Praos
@@ -283,8 +284,9 @@ type family EraProto era :: Type where
     EraProto AllegraEra = TPraos StandardCrypto
     EraProto MaryEra    = TPraos StandardCrypto
     EraProto AlonzoEra  = TPraos StandardCrypto
-    EraProto BabbageEra = Praos StandardCrypto
-    EraProto ConwayEra  = Praos StandardCrypto
+    EraProto BabbageEra  = Praos StandardCrypto
+    EraProto ConwayEra   = Praos StandardCrypto
+    EraProto DijkstraEra = Praos StandardCrypto
 
 data ShelleyBasedEra era where
     ShelleyBasedEraShelley  :: ShelleyBasedEra ShelleyEra

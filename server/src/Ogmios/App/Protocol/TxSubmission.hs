@@ -44,9 +44,6 @@ import Ogmios.Prelude
 import Cardano.Ledger.Alonzo.TxBody
     ( AlonzoEraTxBody (..)
     )
-import Cardano.Ledger.Api.Era
-    ( DijkstraEra
-    )
 import Cardano.Ledger.Babbage.TxBody
     ( BabbageEraTxBody (..)
     )
