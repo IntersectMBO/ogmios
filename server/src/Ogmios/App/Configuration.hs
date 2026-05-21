@@ -189,18 +189,14 @@ readAlonzoGenesis configFile = do
     withoutFutureParameters sourceParamNames config =
         let
             inner = Ledger.unAlonzoGenesisWrapper config
-            costModels = Ledger.uappCostModels inner
-            costModelsPruned = Map.adjust
-                (either (error . show) identity
-                    . Ledger.mkCostModel Ledger.PlutusV1
-                    . Map.elems
-                    . (`Map.restrictKeys` sourceParamNames)
-                    . Ledger.costModelToMap
-                )
-                Ledger.PlutusV1
-                (Ledger.costModelsValid costModels)
+            prunedV1 = either (error . show) identity
+                     . Ledger.mkCostModel Ledger.PlutusV1
+                     . Map.elems
+                     . (`Map.restrictKeys` sourceParamNames)
+                     . Ledger.costModelToMap
+                     $ Ledger.uappPlutusV1CostModel inner
          in
-            Ledger.AlonzoGenesisWrapper (inner { Ledger.uappCostModels = Ledger.mkCostModels costModelsPruned })
+            config { Ledger.unAlonzoGenesisWrapper = inner { Ledger.uappPlutusV1CostModel = prunedV1 } }
 
 
 readConwayGenesis :: MonadIO m => FilePath -> m (Either Text (GenesisConfig ConwayEra))
