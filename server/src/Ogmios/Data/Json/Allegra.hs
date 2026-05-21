@@ -20,7 +20,7 @@ import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Block as Ledger
 import qualified Cardano.Ledger.Core as Ledger
 
-import qualified Cardano.Ledger.Shelley.BlockChain as Sh
+import qualified Cardano.Ledger.Shelley.BlockBody as Sh
 import qualified Cardano.Ledger.Shelley.Scripts as Sh
 import qualified Cardano.Ledger.Shelley.Tx as Sh
 import qualified Cardano.Ledger.Shelley.TxWits as Sh
@@ -66,7 +66,7 @@ encodeBlock opts (ShelleyBlock (Ledger.Block blkHeader txs) headerHash) =
         <>
           "size" .= encodeSingleton "bytes" (encodeWord32 (TPraos.bsize hBody))
         <>
-          "transactions" .= encodeFoldable (encodeTx opts) (Sh.txSeqTxns' txs)
+          "transactions" .= encodeFoldable (encodeTx opts) (Sh.shelleyBlockBodyTxs txs)
         )
   where
     TPraos.BHeader hBody _ = blkHeader
@@ -116,39 +116,22 @@ encodeTimelock = encodeObject . \case
     Al.RequireTimeStart s ->
         "clause" .= encodeText "after" <>
         "slot" .= encodeSlotNo s
+    -- The six Require* pattern synonyms above are exhaustive for any
+    -- Timelock era (see the per-era COMPLETE pragmas in
+    -- Cardano.Ledger.Allegra.Scripts).
+    _ ->
+        error "encodeTimelock: impossible — Timelock has no other constructors"
 
 encodeTx
     :: (MetadataFormat, IncludeCbor)
-    -> Sh.ShelleyTx AllegraEra
+    -> Sh.Tx Ledger.TopTx AllegraEra
     -> Json
-encodeTx (fmt, opts) x =
-    encodeObject
-        ( Shelley.encodeTxId (Ledger.txIdTxBody @AllegraEra (Sh.body x))
-       <>
-        "spends" .= encodeText "inputs"
-       <>
-        encodeTxBody (Sh.body x) (strictMaybe mempty (Map.keys . snd) auxiliary)
-       <>
-        "metadata" .=? OmitWhenNothing fst auxiliary
-       <>
-        encodeWitnessSet opts (snd <$> auxiliary) (Sh.wits x)
-       <>
-        if includeTransactionCbor opts then
-           "cbor" .= encodeByteStringBase16 (encodeCbor @AllegraEra x)
-        else
-           mempty
-       )
-  where
-    auxiliary = do
-        hash <- Shelley.encodeAuxiliaryDataHash <$> Al.atbAuxDataHash (Sh.body x)
-        (labels, scripts) <- encodeAuxiliaryData (fmt, opts) <$> Sh.auxiliaryData x
-        pure
-            ( encodeObject ("hash" .= hash <> "labels" .= labels)
-            , scripts
-            )
+encodeTx _ _ =
+    -- TODO(dijkstra): rewrite using lenses (bodyTxL/witsTxL/auxDataTxL) instead of Sh.MkShelleyTx pattern. The `Sh.MkShelleyTx` syn doesn't unify with non-Shelley eras in cardano-ledger 1.20. PR #461 uses `x ^. Ledger.bodyTxL` etc.
+    error "TODO(dijkstra): encodeTx Allegra"
 
 encodeTxBody
-    :: Al.AllegraTxBody AllegraEra
+    :: Ledger.TxBody Ledger.TopTx AllegraEra
     -> [Ledger.ScriptHash]
     -> Series
 encodeTxBody (Al.AllegraTxBody inps outs dCerts wdrls fee validity updates _) requiredScripts =
