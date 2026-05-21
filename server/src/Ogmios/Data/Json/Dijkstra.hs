@@ -6,6 +6,7 @@ module Ogmios.Data.Json.Dijkstra
     ( encodeNativeScript
     , encodeScript
     , encodeTxOut
+    , encodeUtxo
     , encodeDelegCert
     , encodeTxCert
     , encodeScriptPurposeItem
@@ -40,6 +41,9 @@ import qualified Cardano.Ledger.Dijkstra.TxCert as Di
 import qualified Cardano.Ledger.Dijkstra.TxInfo as Di
 import qualified Cardano.Ledger.Mary.Value as Ma
 import qualified Cardano.Ledger.Plutus.Data as Ledger
+import qualified Cardano.Ledger.Shelley.API as Sh
+
+import qualified Data.Map.Strict as Map
 
 import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Conway as Conway
@@ -128,6 +132,23 @@ encodeTxOut opts (Ba.BabbageTxOut addr value datum script) =
     ) <>
     "script" .=? OmitWhenNothing
         (encodeScript opts) script
+
+encodeUtxo
+    :: forall era.
+        ( Al.AlonzoEraScript era
+        , Ledger.Script era ~ Al.AlonzoScript era
+        , Ledger.Value era ~ Ma.MaryValue
+        , Ledger.TxOut era ~ Ba.BabbageTxOut era
+        , Ledger.NativeScript era ~ Di.DijkstraNativeScript era
+        )
+    => Sh.UTxO era
+    -> Json
+encodeUtxo =
+    encodeList id
+    . Map.foldrWithKey (\i o -> (:) (encodeIO i o)) []
+    . Sh.unUTxO
+  where
+    encodeIO i o = encodeObject (Shelley.encodeTxIn i <> encodeTxOut includeAllCbor o)
 
 encodeDelegCert
     :: Di.DijkstraDelegCert
