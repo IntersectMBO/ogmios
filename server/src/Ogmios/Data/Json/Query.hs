@@ -17,13 +17,13 @@ module Ogmios.Data.Json.Query
     , AdHocQuery (..)
 
       -- ** Types in queries
-    , AccountState (..)
+    , AccountState
     , DRepSummary (..)
     , Delegations
     , Deposits
     , GenesisConfig
     , Interpreter
-    , Ledger.PoolParams
+    , Ledger.StakePoolParams
     , PoolRewardsInfo (..)
     , RewardAccountSummaries
     , RewardAccountSummary (..)
@@ -113,14 +113,28 @@ import Cardano.Crypto.Hash.Class
     ( Hash
     , HashAlgorithm
     )
+import Cardano.Ledger.Allegra.Scripts
+    ( AllegraEraScript
+    , mkTimeExpire
+    , mkTimeStart
+    )
 import Cardano.Ledger.Alonzo.Core
     ( AlonzoEraScript
+    )
+import Cardano.Ledger.Shelley.Scripts
+    ( mkRequireAllOf
+    , mkRequireAnyOf
+    , mkRequireMOf
+    , mkRequireSignature
     )
 import Cardano.Ledger.Alonzo.Genesis
     ( AlonzoGenesis
     )
 import Cardano.Ledger.Api.State.Query
     ( CommitteeMembersState
+    )
+import Cardano.Ledger.Compactible
+    ( fromCompact
     )
 import Cardano.Ledger.Babbage
     ()
@@ -152,7 +166,7 @@ import Cardano.Ledger.Shelley.Genesis
     ( ShelleyGenesis
     )
 import Cardano.Ledger.Shelley.LedgerState
-    ( AccountState (..)
+    ( AccountState
     )
 import Cardano.Ledger.Shelley.Rewards
     ( StakeShare (..)
@@ -296,7 +310,6 @@ import qualified Ouroboros.Consensus.Ledger.Query as LSQ
 import qualified PlutusLedgerApi.Common as Plutus
 
 import qualified Cardano.Ledger.Address as Ledger
-import qualified Cardano.Ledger.Allegra.Scripts as Ledger.Allegra
 import qualified Cardano.Ledger.Alonzo.Scripts as Ledger.Alonzo
 import qualified Cardano.Ledger.Babbage.TxBody as Ledger.Babbage
 import qualified Cardano.Ledger.BaseTypes as Ledger
@@ -309,8 +322,6 @@ import qualified Cardano.Ledger.Hashes as Ledger
 import qualified Cardano.Ledger.Mary.Value as Ledger.Mary
 import qualified Cardano.Ledger.Plutus.Data as Ledger.Plutus
 import qualified Cardano.Ledger.Plutus.Language as Ledger.Plutus
-import qualified Cardano.Ledger.PoolParams as Ledger
-import qualified Cardano.Ledger.Shelley.Scripts as Ledger.Shelley
 import qualified Cardano.Ledger.State as Ledger
 import qualified Cardano.Ledger.TxIn as Ledger
 
@@ -327,6 +338,7 @@ import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Byron as Byron
 import qualified Ogmios.Data.Json.Conway as Conway
 import qualified Ogmios.Data.Json.Mary as Mary
+import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
 import qualified Ogmios.Data.Json.Shelley as Shelley
 
 -- FIXME
@@ -335,7 +347,6 @@ import qualified Ogmios.Data.Json.Shelley as Shelley
 -- import qualified Cardano.Ledger.PoolDistr as Ledger
 -- import qualified Cardano.Ledger.Api.State.Query as Ledger
 import qualified Cardano.Protocol.TPraos.Rules.Tickn as TPraos
-import qualified Ouroboros.Consensus.Shelley.Ledger.Query.Types as Consensus
 
 
 --
@@ -498,35 +509,35 @@ type GenResult crypto f t =
     Proxy (QueryResult crypto t) -> f (QueryResult crypto t)
 
 type Delegations =
-    Map (Ledger.Credential 'Staking) (Ledger.KeyHash 'StakePool)
+    Map (Ledger.Credential Staking) (Ledger.KeyHash StakePool)
 
 type Deposits =
-    Map (Ledger.Credential 'Staking ) Coin
+    Map (Ledger.Credential Staking ) Coin
 
 type VoteDelegatees =
-    Map (Ledger.Credential 'Staking) Ledger.DRep
+    Map (Ledger.Credential Staking) Ledger.DRep
 
 type RewardAccounts =
-    Map (Ledger.Credential 'Staking) Coin
+    Map (Ledger.Credential Staking) Coin
 
 type RewardAccountSummaries =
-    Map (Ledger.Credential 'Staking) RewardAccountSummary
+    Map (Ledger.Credential Staking) RewardAccountSummary
 
 type StakePoolsPerformances =
     ( Sh.Api.RewardParams
-    , Map (Ledger.KeyHash 'StakePool) Sh.Api.RewardInfoPool
+    , Map (Ledger.KeyHash StakePool) Sh.Api.RewardInfoPool
     )
 
 data RewardAccountSummary = RewardAccountSummary
-    { poolDelegate :: !(StrictMaybe (Ledger.KeyHash 'StakePool))
+    { poolDelegate :: !(StrictMaybe (Ledger.KeyHash StakePool))
     , drepDelegate :: !(StrictMaybe Ledger.DRep)
     , rewards :: !Coin
     , deposit :: !Coin
     } deriving (Eq, Show, Generic)
 
 data DRepSummary
-    = AlwaysAbstain Coin (Set (Ledger.Credential 'Staking))
-    | AlwaysNoConfidence Coin (Set (Ledger.Credential 'Staking))
+    = AlwaysAbstain Coin (Set (Ledger.Credential Staking))
+    | AlwaysNoConfidence Coin (Set (Ledger.Credential Staking))
     | Registered Coin Ledger.DRepState
     deriving (Eq, Show, Generic)
 
@@ -535,13 +546,13 @@ data DRepSummary
 --
 
 encodeAccountState
-    :: AccountState
+    :: Ledger.ChainAccountState
     -> Json
 encodeAccountState st =
     "treasury" .=
-        encodeCoin (asTreasury st) <>
+        encodeCoin (Ledger.casTreasury st) <>
     "reserves" .=
-        encodeCoin (asReserves st)
+        encodeCoin (Ledger.casReserves st)
     & encodeObject
 
 encodeBound
@@ -682,23 +693,25 @@ encodePoint = \case
         & encodeObject
 
 encodePoolDistr
-    :: Consensus.PoolDistr crypto
+    :: Ledger.PoolDistr
     -> Json
 encodePoolDistr =
-    encodeMap Shelley.stringifyPoolId encodeIndividualPoolStake . Consensus.unPoolDistr
+    encodeMap Shelley.stringifyPoolId encodeIndividualPoolStake . Ledger.unPoolDistr
   where
     encodeIndividualPoolStake
-        :: Consensus.IndividualPoolStake crypto
+        :: Ledger.IndividualPoolStake
         -> Json
     encodeIndividualPoolStake x =
         "stake" .=
-            encodeRational (Consensus.individualPoolStake x) <>
+            encodeRational (Ledger.individualPoolStake x) <>
+        "totalStake" .=
+            encodeCoin (fromCompact (Ledger.individualTotalPoolStake x)) <>
         "vrf" .=
-            Shelley.encodeHash (Consensus.individualPoolStakeVrf x)
+            Shelley.encodeHash (Ledger.unVRFVerKeyHash (Ledger.individualPoolStakeVrf x))
         & encodeObject
 
 encodeRewardInfoPool
-    :: Ledger.KeyHash 'StakePool
+    :: Ledger.KeyHash StakePool
     -> Sh.Api.RewardInfoPool
     -> Json
 encodeRewardInfoPool poolId info =
@@ -815,8 +828,8 @@ deserialisePartialNewEpochState (Serialised bytes) =
     decodePartialLedgerState
         :: forall s. ()
         => StateT
-            ( Binary.Interns (Ledger.Credential 'Staking)
-            , Binary.Interns (Ledger.KeyHash 'StakePool)
+            ( Binary.Interns (Ledger.Credential Staking)
+            , Binary.Interns (Ledger.KeyHash StakePool)
             , Binary.Interns (Ledger.Credential DRepRole)
             , Binary.Interns (Ledger.Credential HotCommitteeRole)
             )
@@ -847,7 +860,7 @@ encodeSafeZone = \case
         encodeNull
 
 encodeStakePools
-    :: Map (Ledger.KeyHash 'StakePool) (Maybe Ledger.PoolParams, StrictMaybe Coin)
+    :: Map (Ledger.KeyHash StakePool) (Maybe Ledger.StakePoolParams, StrictMaybe Coin)
     -> Json
 encodeStakePools =
     encodeObject . encodeMapSeries Shelley.stringifyPoolId (\k (params, stake) ->
@@ -893,6 +906,11 @@ parseQueryLedgerConstitution genResult =
                     (LSQ.BlockQuery (QueryIfCurrentConway GetConstitution))
                     (eraMismatchOrResult (encodeObject . Conway.encodeConstitution))
                     (genResult $ Proxy @ConwayEra)
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeStandardQuery
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra GetConstitution))
+                    (eraMismatchOrResult (encodeObject . Conway.encodeConstitution))
+                    (genResult $ Proxy @DijkstraEra)
 
 parseQueryLedgerConstitutionalCommittee
     :: forall f crypto. ()
@@ -915,6 +933,11 @@ parseQueryLedgerConstitutionalCommittee genResult =
             SomeShelleyEra ShelleyBasedEraConway ->
                 Just $ SomeStandardQuery
                     (LSQ.BlockQuery (QueryIfCurrentConway $ GetCommitteeMembersState mempty mempty mempty))
+                    (eraMismatchOrResult Conway.encodeCommitteeMembersState)
+                    genResult
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeStandardQuery
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra $ GetCommitteeMembersState mempty mempty mempty))
                     (eraMismatchOrResult Conway.encodeCommitteeMembersState)
                     genResult
 
@@ -971,6 +994,21 @@ parseQueryLedgerDelegateRepresentatives genResult =
                     (\st distr -> let delegs = Map.empty in mergeAll delegs (Map.mapKeys Ledger.credToDRep st) distr)
                     (eraMismatchOrResult (encodeMapAsList encodeDRepSummary . withDefaultProtocolDreps))
                     genResult
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeCompoundQuery
+                    (LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetDRepState credentials)
+                        )
+                    )
+                    (\_ -> LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetDRepStakeDistr dreps)
+                        )
+                    )
+                    (\st distr -> let delegs = Map.empty in mergeAll delegs (Map.mapKeys Ledger.credToDRep st) distr)
+                    (eraMismatchOrResult (encodeMapAsList encodeDRepSummary . withDefaultProtocolDreps))
+                    genResult
   where
     withDefaultProtocolDreps
         :: Map Ledger.DRep DRepSummary
@@ -980,7 +1018,7 @@ parseQueryLedgerDelegateRepresentatives genResult =
         . Map.alter (<|> Just (AlwaysNoConfidence mempty Set.empty)) Ledger.DRepAlwaysNoConfidence
 
     mergeAll
-        :: Map Ledger.DRep (Set (Ledger.Credential 'Staking))
+        :: Map Ledger.DRep (Set (Ledger.Credential Staking))
         -> Map Ledger.DRep Ledger.DRepState
         -> Map Ledger.DRep Coin
         -> Map Ledger.DRep DRepSummary
@@ -1041,7 +1079,7 @@ parseQueryLedgerDelegateRepresentatives genResult =
               "mandate" .=
                 (encodeSingleton "epoch" . encodeEpochNo) (Ledger.drepExpiry summary)
            <> "deposit" .=
-                encodeCoin (Ledger.drepDeposit summary)
+                encodeCoin (fromCompact (Ledger.drepDeposit summary))
            <> "stake" .=
                 encodeCoin stake
            <> "metadata" .=? OmitWhenNothing
@@ -1078,6 +1116,8 @@ parseQueryLedgerEpoch genResult =
                     LSQ.BlockQuery $ QueryIfCurrentBabbage GetEpochNo
                 SomeShelleyEra ShelleyBasedEraConway ->
                     LSQ.BlockQuery $ QueryIfCurrentConway GetEpochNo
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    LSQ.BlockQuery $ QueryIfCurrentDijkstra GetEpochNo
             )
 
 parseQueryLedgerEraStart
@@ -1107,6 +1147,8 @@ parseQueryLedgerEraStart genResult =
                     LSQ.BlockQuery $ QueryAnytimeBabbage GetEraStart
                 SomeShelleyEra ShelleyBasedEraConway ->
                     LSQ.BlockQuery $ QueryAnytimeConway GetEraStart
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    LSQ.BlockQuery $ QueryAnytimeDijkstra GetEraStart
             )
 
 parseQueryLedgerEraSummaries
@@ -1162,10 +1204,15 @@ parseQueryLedgerTip genResultInEraTPraos genResultInEraPraos =
                     (LSQ.BlockQuery (QueryIfCurrentConway GetLedgerTip))
                     (eraMismatchOrResult (encodePoint . castPoint @(Praos crypto)))
                     (genResultInEraPraos (Proxy @ConwayEra))
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeStandardQuery
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra GetLedgerTip))
+                    (eraMismatchOrResult (encodePoint . castPoint @(Praos crypto)))
+                    (genResultInEraPraos (Proxy @DijkstraEra))
 
 parseQueryLedgerTreasuryAndReserves
     :: forall crypto f. ()
-    => GenResult crypto f AccountState
+    => GenResult crypto f Ledger.ChainAccountState
     -> Json.Value
     -> Json.Parser (QueryInEra f (CardanoBlock crypto))
 parseQueryLedgerTreasuryAndReserves genResult =
@@ -1190,6 +1237,8 @@ parseQueryLedgerTreasuryAndReserves genResult =
                     LSQ.BlockQuery $ QueryIfCurrentBabbage GetAccountState
                 SomeShelleyEra ShelleyBasedEraConway ->
                     LSQ.BlockQuery $ QueryIfCurrentConway GetAccountState
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    LSQ.BlockQuery $ QueryIfCurrentDijkstra GetAccountState
             )
 
 parseQueryLedgerDump
@@ -1236,6 +1285,12 @@ parseQueryLedgerDump genResult =
                     (LSQ.BlockQuery $ QueryIfCurrentConway $ GetCBOR DebugNewEpochState)
                     (saveToDisk filepath . eraMismatchOrResult unSerialised)
                     (genResult $ Proxy @ConwayEra)
+
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeEffectfullQuery
+                    (LSQ.BlockQuery $ QueryIfCurrentDijkstra $ GetCBOR DebugNewEpochState)
+                    (saveToDisk filepath . eraMismatchOrResult unSerialised)
+                    (genResult $ Proxy @DijkstraEra)
   where
     saveToDisk
         :: forall m. (MonadDisk m)
@@ -1292,6 +1347,12 @@ parseQueryLedgerNonces genResult =
                         (LSQ.BlockQuery $ QueryIfCurrentConway DebugChainDepState)
                         (eraMismatchOrResult encodePraosState)
                         (genResult $ Proxy @ConwayEra)
+
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    Just $ SomeStandardQuery
+                        (LSQ.BlockQuery $ QueryIfCurrentDijkstra DebugChainDepState)
+                        (eraMismatchOrResult encodePraosState)
+                        (genResult $ Proxy @DijkstraEra)
   where
     encodeTPraosState
         :: TPraosState
@@ -1370,6 +1431,12 @@ parseQueryLedgerOperationalCertificates genResult =
                         (LSQ.BlockQuery $ QueryIfCurrentConway DebugChainDepState)
                         (eraMismatchOrResult encodePraosState)
                         (genResult $ Proxy @ConwayEra)
+
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    Just $ SomeStandardQuery
+                        (LSQ.BlockQuery $ QueryIfCurrentDijkstra DebugChainDepState)
+                        (eraMismatchOrResult encodePraosState)
+                        (genResult $ Proxy @DijkstraEra)
   where
     encodeTPraosState
         :: TPraosState
@@ -1425,6 +1492,9 @@ parseQueryLedgerProjectedRewards genResult =
                         (GetNonMyopicMemberRewards credentials)
                 SomeShelleyEra ShelleyBasedEraConway ->
                     LSQ.BlockQuery $ QueryIfCurrentConway
+                        (GetNonMyopicMemberRewards credentials)
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    LSQ.BlockQuery $ QueryIfCurrentDijkstra
                         (GetNonMyopicMemberRewards credentials)
             )
   where
@@ -1545,6 +1615,27 @@ parseQueryLedgerRewardAccountSummaries genResult =
                     (\a b c -> mergeAll c a b)
                     (eraMismatchOrResult encodeRewardAccountSummaries)
                     genResult
+
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                SomeCompound2Query
+                    (LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetFilteredDelegationsAndRewardAccounts credentials)
+                        )
+                    )
+                    (\_ -> LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetStakeDelegDeposits credentials)
+                        )
+                    )
+                    (\_ deposits -> LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetFilteredVoteDelegatees (Map.keysSet deposits))
+                        )
+                    )
+                    (\a b c -> mergeAll c a b)
+                    (eraMismatchOrResult encodeRewardAccountSummaries)
+                    genResult
   where
     mergeAll
         :: VoteDelegatees
@@ -1619,6 +1710,11 @@ parseQueryLedgerProtocolParameters genResultInEra =
                     (LSQ.BlockQuery (QueryIfCurrentConway GetCurrentPParams))
                     (eraMismatchOrResult Conway.encodePParams)
                     (genResultInEra (Proxy @ConwayEra))
+            -- TODO(dijkstra): Conway.encodePParams matches ConwayPParams,
+            -- but Dijkstra has its own DijkstraPParams. Needs a Dijkstra-side
+            -- PParams encoder before this arm can route the query.
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Nothing
 
 parseQueryLedgerGovernanceProposals
     :: forall crypto f. ()
@@ -1649,6 +1745,11 @@ parseQueryLedgerGovernanceProposals genResultInEra =
                         )
                     )
                     (genResultInEra (Proxy @ConwayEra))
+            -- TODO(dijkstra): the GovState accessors in Cardano.Ledger.Conway.Governance
+            -- are typed against ConwayEra; Dijkstra's GovState is parameterised over
+            -- DijkstraEra. Needs an era-poly variant before this routes.
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Nothing
 
 parseQueryLedgerGovernanceProposalsByProposalReference
     :: forall crypto f. ()
@@ -1682,11 +1783,15 @@ parseQueryLedgerGovernanceProposalsByProposalReference genResultInEra =
                         )
                     )
                     (genResultInEra (Proxy @ConwayEra))
+            -- TODO(dijkstra): same as the unfiltered variant above; needs an
+            -- era-poly GovState accessor surface.
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Nothing
 
 
 parseQueryLedgerLiveStakeDistribution
     :: forall crypto f. ()
-    => GenResult crypto f (Consensus.PoolDistr crypto)
+    => GenResult crypto f Ledger.PoolDistr
     -> Json.Value
     -> Json.Parser (QueryInEra f (CardanoBlock crypto))
 parseQueryLedgerLiveStakeDistribution genResult =
@@ -1701,17 +1806,19 @@ parseQueryLedgerLiveStakeDistribution genResult =
             .
             ( \case
                 SomeShelleyEra ShelleyBasedEraShelley ->
-                    LSQ.BlockQuery $ QueryIfCurrentShelley GetStakeDistribution
+                    LSQ.BlockQuery $ QueryIfCurrentShelley GetStakeDistribution2
                 SomeShelleyEra ShelleyBasedEraAllegra ->
-                    LSQ.BlockQuery $ QueryIfCurrentAllegra GetStakeDistribution
+                    LSQ.BlockQuery $ QueryIfCurrentAllegra GetStakeDistribution2
                 SomeShelleyEra ShelleyBasedEraMary ->
-                    LSQ.BlockQuery $ QueryIfCurrentMary GetStakeDistribution
+                    LSQ.BlockQuery $ QueryIfCurrentMary GetStakeDistribution2
                 SomeShelleyEra ShelleyBasedEraAlonzo ->
-                    LSQ.BlockQuery $ QueryIfCurrentAlonzo GetStakeDistribution
+                    LSQ.BlockQuery $ QueryIfCurrentAlonzo GetStakeDistribution2
                 SomeShelleyEra ShelleyBasedEraBabbage ->
-                    LSQ.BlockQuery $ QueryIfCurrentBabbage GetStakeDistribution
+                    LSQ.BlockQuery $ QueryIfCurrentBabbage GetStakeDistribution2
                 SomeShelleyEra ShelleyBasedEraConway ->
-                    LSQ.BlockQuery $ QueryIfCurrentConway GetStakeDistribution
+                    LSQ.BlockQuery $ QueryIfCurrentConway GetStakeDistribution2
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    LSQ.BlockQuery $ QueryIfCurrentDijkstra GetStakeDistribution2
             )
 
 parseQueryLedgerUtxo
@@ -1753,6 +1860,11 @@ parseQueryLedgerUtxo genResultInEra =
                     (LSQ.BlockQuery (QueryIfCurrentConway GetUTxOWhole))
                     (eraMismatchOrResult Babbage.encodeUtxo)
                     (genResultInEra (Proxy @ConwayEra))
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeStandardQuery
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra GetUTxOWhole))
+                    (eraMismatchOrResult Dijkstra.encodeUtxo)
+                    (genResultInEra (Proxy @DijkstraEra))
 
 parseQueryLedgerUtxoByAddress
     :: forall crypto f. ()
@@ -1794,6 +1906,11 @@ parseQueryLedgerUtxoByAddress genResultInEra =
                     (LSQ.BlockQuery (QueryIfCurrentConway (GetUTxOByAddress addrs)))
                     (eraMismatchOrResult Babbage.encodeUtxo)
                     (genResultInEra (Proxy @ConwayEra))
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeStandardQuery
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra (GetUTxOByAddress addrs)))
+                    (eraMismatchOrResult Dijkstra.encodeUtxo)
+                    (genResultInEra (Proxy @DijkstraEra))
 
 parseQueryLedgerUtxoByOutputReference
     :: forall crypto f. ()
@@ -1835,6 +1952,11 @@ parseQueryLedgerUtxoByOutputReference genResultInEra =
                     (LSQ.BlockQuery $ QueryIfCurrentConway (GetUTxOByTxIn ins))
                     (eraMismatchOrResult Babbage.encodeUtxo)
                     (genResultInEra (Proxy @ConwayEra))
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeStandardQuery
+                    (LSQ.BlockQuery $ QueryIfCurrentDijkstra (GetUTxOByTxIn ins))
+                    (eraMismatchOrResult Dijkstra.encodeUtxo)
+                    (genResultInEra (Proxy @DijkstraEra))
 
 parseQueryNetworkGenesisConfiguration
     :: forall f crypto. ()
@@ -1900,6 +2022,8 @@ parseQueryLedgerStakePoolsPerformances genResult =
                     LSQ.BlockQuery $ QueryIfCurrentBabbage GetRewardInfoPools
                 SomeShelleyEra ShelleyBasedEraConway ->
                     LSQ.BlockQuery $ QueryIfCurrentConway GetRewardInfoPools
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    LSQ.BlockQuery $ QueryIfCurrentDijkstra GetRewardInfoPools
             )
 
 parseQueryLedgerRewardsProvenance
@@ -1952,11 +2076,18 @@ parseQueryLedgerRewardsProvenance genResult =
                     (\(getCompactGenesis -> genesis) -> newRewardsProvenance genesis . deserialisePartialNewEpochState)
                     (eraMismatchOrResult encodeRewardsProvenance)
                     genResult
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeCompoundQuery
+                    (LSQ.BlockQuery $ QueryIfCurrentDijkstra GetGenesisConfig)
+                    (\_ -> LSQ.BlockQuery $ QueryIfCurrentDijkstra (GetCBOR DebugNewEpochState))
+                    (\(getCompactGenesis -> genesis) -> newRewardsProvenance genesis . deserialisePartialNewEpochState)
+                    (eraMismatchOrResult encodeRewardsProvenance)
+                    genResult
 
 parseQueryLedgerStakePools
     :: forall crypto f. ()
-    => GenResult crypto f (Map (Ledger.KeyHash 'StakePool) Ledger.PoolParams)
-    -> GenResult crypto f (Map (Ledger.KeyHash 'StakePool) (Maybe Ledger.PoolParams, StrictMaybe Coin))
+    => GenResult crypto f (Map (Ledger.KeyHash StakePool) Ledger.StakePoolParams)
+    -> GenResult crypto f (Map (Ledger.KeyHash StakePool) (Maybe Ledger.StakePoolParams, StrictMaybe Coin))
     -> Json.Value
     -> Json.Parser (QueryInEra f (CardanoBlock crypto))
 parseQueryLedgerStakePools genResultNoStake genResult =
@@ -1971,9 +2102,9 @@ parseQueryLedgerStakePools genResultNoStake genResult =
     encodeStakePoolsWithoutStake = encodeStakePools . Map.map (\params -> (Just params,SNothing))
 
     mergeDistrAndParams
-        :: Map (Ledger.KeyHash 'StakePool) Coin
-        -> Map (Ledger.KeyHash 'StakePool) Ledger.PoolParams
-        -> Map (Ledger.KeyHash 'StakePool) (Maybe Ledger.PoolParams, StrictMaybe Coin)
+        :: Map (Ledger.KeyHash StakePool) Coin
+        -> Map (Ledger.KeyHash StakePool) Ledger.StakePoolParams
+        -> Map (Ledger.KeyHash StakePool) (Maybe Ledger.StakePoolParams, StrictMaybe Coin)
     mergeDistrAndParams =
         Map.merge
            (Map.mapMissing $ \_ distr -> (Nothing, SJust distr))
@@ -1999,6 +2130,13 @@ parseQueryLedgerStakePools genResultNoStake genResult =
                     mergeDistrAndParams
                     (eraMismatchOrResult encodeStakePools)
                     genResult
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeCompoundQuery
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra (GetSPOStakeDistr ids)))
+                    (\_ -> LSQ.BlockQuery (QueryIfCurrentDijkstra (GetStakePoolParams ids)))
+                    mergeDistrAndParams
+                    (eraMismatchOrResult encodeStakePools)
+                    genResult
 
         | otherwise =
             (\queryDef -> Just $ SomeStandardQuery
@@ -2020,6 +2158,8 @@ parseQueryLedgerStakePools genResultNoStake genResult =
                     LSQ.BlockQuery $ QueryIfCurrentBabbage (GetStakePoolParams ids)
                 SomeShelleyEra ShelleyBasedEraConway ->
                     LSQ.BlockQuery $ QueryIfCurrentConway (GetStakePoolParams ids)
+                SomeShelleyEra ShelleyBasedEraDijkstra ->
+                    LSQ.BlockQuery $ QueryIfCurrentDijkstra (GetStakePoolParams ids)
             )
 
     getAllStakePools includeStake
@@ -2043,6 +2183,14 @@ parseQueryLedgerStakePools genResultNoStake genResult =
                     -- 1. We cannot get all params for all stake pools without explicitly listing them.
                     -- 2. The key set from SPOStakeDistr only contains pools that have delegators; so we're missing quite a lot of keys.
                     (\allPools _ -> LSQ.BlockQuery (QueryIfCurrentConway (GetStakePoolParams allPools)))
+                    (const mergeDistrAndParams)
+                    (eraMismatchOrResult encodeStakePools)
+                    genResult
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                Just $ SomeCompound2Query
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra GetStakePools))
+                    (\_ -> LSQ.BlockQuery (QueryIfCurrentDijkstra (GetSPOStakeDistr Set.empty)))
+                    (\allPools _ -> LSQ.BlockQuery (QueryIfCurrentDijkstra (GetStakePoolParams allPools)))
                     (const mergeDistrAndParams)
                     (eraMismatchOrResult encodeStakePools)
                     genResult
@@ -2087,6 +2235,13 @@ parseQueryLedgerStakePools genResultNoStake genResult =
                 SomeCompoundQuery
                     (LSQ.BlockQuery (QueryIfCurrentConway GetStakePools))
                     (LSQ.BlockQuery . QueryIfCurrentConway . GetStakePoolParams)
+                    (const identity)
+                    (eraMismatchOrResult encodeStakePoolsWithoutStake)
+                    genResultNoStake
+            SomeShelleyEra ShelleyBasedEraDijkstra ->
+                SomeCompoundQuery
+                    (LSQ.BlockQuery (QueryIfCurrentDijkstra GetStakePools))
+                    (LSQ.BlockQuery . QueryIfCurrentDijkstra . GetStakePoolParams)
                     (const identity)
                     (eraMismatchOrResult encodeStakePoolsWithoutStake)
                     genResultNoStake
@@ -2209,9 +2364,9 @@ decodeCoin = Json.withObject "Lovelace" $ \o -> do
     pure $ Ledger.word64ToCoin lovelace
 
 decodeStakingCredential
-    :: (ByteString -> Json.Parser (Ledger.Credential 'Staking))
+    :: (ByteString -> Json.Parser (Ledger.Credential Staking))
     -> Json.Value
-    -> Json.Parser (Ledger.Credential 'Staking)
+    -> Json.Parser (Ledger.Credential Staking)
 decodeStakingCredential decodeAsKeyOrScript =
     Json.withText "StakingCredential" $ \(encodeUtf8 -> str) -> asum
         [ decodeBase16 str >>=
@@ -2234,19 +2389,19 @@ decodeStakingCredential decodeAsKeyOrScript =
   where
     decodeAsStakeAddress
         :: ByteString
-        -> Json.Parser (Ledger.Credential 'Staking)
+        -> Json.Parser (Ledger.Credential Staking)
     decodeAsStakeAddress =
-        fmap Ledger.raCredential
+        fmap (Ledger.unAccountId . Ledger.aaId)
             . maybe invalidStakeAddress pure
-            . Ledger.deserialiseRewardAccount
+            . Ledger.deserialiseAccountAddress
       where
         invalidStakeAddress =
             fail "invalid stake address"
 
 decodeDRepCredential
-    :: (ByteString -> Json.Parser (Ledger.Credential 'DRepRole))
+    :: (ByteString -> Json.Parser (Ledger.Credential DRepRole))
     -> Json.Value
-    -> Json.Parser (Ledger.Credential 'DRepRole)
+    -> Json.Parser (Ledger.Credential DRepRole)
 decodeDRepCredential decodeAsKeyOrScript =
     Json.withText "DRepCredential" $ \(encodeUtf8 -> str) -> asum
         [ decodeBase16 str >>=
@@ -2350,7 +2505,7 @@ decodePolicyId =
 
 decodePoolId
     :: Json.Value
-    -> Json.Parser (Ledger.KeyHash 'StakePool)
+    -> Json.Parser (Ledger.KeyHash StakePool)
 decodePoolId = Json.withObject "StakePoolId" $ \obj -> do
     txt <- obj .: "id"
     poolIdFromBytes fromBech32 txt <|> poolIdFromBytes fromBase16 txt
@@ -2375,7 +2530,6 @@ decodeScript
     :: forall era.
         ( AlonzoEraScript era
         , Ledger.Script era ~ Ledger.Alonzo.AlonzoScript era
-        , Ledger.NativeScript era ~ Ledger.Allegra.Timelock era
         )
     => Json.Value
     -> Json.Parser (Ledger.Script era)
@@ -2393,20 +2547,8 @@ decodeScript v =
     decodeFromWrappedJson :: Json.Object -> Json.Parser (Ledger.Script era)
     decodeFromWrappedJson o = do
         o .:? "language" >>= \case
-            Just "native" -> do
-                cbor <- o .:? "cbor" >>= traverse (decodeBase16 . encodeUtf8 @Text)
-                json <- o .:? "json"
-                case (cbor, json) of
-                    (Just bytes, _) -> do
-                        case decodeCborAnn @era "Script<Native>" Binary.decCBOR (toLazy bytes) of
-                            Right script ->
-                                pure (Ledger.Alonzo.TimelockScript script)
-                            Left (_ :: Text) ->
-                                fail "couldn't decode native script"
-                    (_, Just script) ->
-                        Ledger.Alonzo.TimelockScript <$> decodeTimeLock script
-                    (_, _) ->
-                        fail "missing field 'cbor' or 'json' to decode native script"
+            Just "native" ->
+                Ledger.Alonzo.NativeScript <$> decodeNativeScript (Json.Object o)
             Just lang@"plutus:v1" -> do
                 bytes <- o .: "cbor"
                 plutus <- Ledger.Alonzo.mkBinaryPlutusScript Ledger.Plutus.PlutusV1 <$> decodePlutusScript Plutus.PlutusV1 lang bytes
@@ -2478,8 +2620,8 @@ decodeSerializedTransaction
     :: forall crypto constraint.
         ( PraosCrypto crypto
         , TPraos.PraosCrypto crypto
-        , constraint ~ (MostRecentEra (CardanoBlock crypto) ~ ConwayEra)
         , crypto ~ StandardCrypto
+        , constraint ~ (MostRecentEra (CardanoBlock crypto) ~ DijkstraEra)
         )
     => Json.Value
     -> Json.Parser (MultiEraDecoder (SerializedTransaction (CardanoBlock crypto)))
@@ -2552,13 +2694,11 @@ decodeSerializedTransaction = Json.withText "Transaction" $ \(encodeUtf8 -> utf8
         wrap :: ByteString -> LByteString
         wrap = Cbor.toLazyByteString . wrapCBORinCBOR Cbor.encodePreEncoded
 
-decodeTimeLock
-    :: ( Ledger.Allegra.AllegraEraScript era
-       , Ledger.NativeScript era ~ Ledger.Allegra.Timelock era
-       )
+decodeNativeScript
+    :: forall era. AllegraEraScript era
     => Json.Value
-    -> Json.Parser (Ledger.Allegra.Timelock era)
-decodeTimeLock = Json.withObject "Script<Native>" $ \o -> do
+    -> Json.Parser (Ledger.NativeScript era)
+decodeNativeScript = Json.withObject "Script<Native>" $ \o -> do
     clause <- o .: "clause"
     case clause :: Text of
         "signature" ->
@@ -2578,21 +2718,21 @@ decodeTimeLock = Json.withObject "Script<Native>" $ \o -> do
   where
     decodeRequireSignature o = do
         from <- o .: "from" >>= decodeHash
-        pure $ Ledger.Shelley.RequireSignature (Ledger.KeyHash from)
+        pure $ mkRequireSignature @era (Ledger.KeyHash from)
     decodeAllOf o = do
         xs <- StrictSeq.fromList <$> (o .: "from")
-        Ledger.Shelley.RequireAllOf <$> traverse decodeTimeLock xs
+        mkRequireAllOf @era <$> traverse decodeNativeScript xs
     decodeAnyOf o = do
         xs <- StrictSeq.fromList <$> (o .: "from")
-        Ledger.Shelley.RequireAnyOf <$> traverse decodeTimeLock xs
+        mkRequireAnyOf @era <$> traverse decodeNativeScript xs
     decodeSomeOf o = do
         n <- o .: "atLeast"
         xs <- StrictSeq.fromList <$> (o .: "from")
-        Ledger.Shelley.RequireMOf n <$> traverse decodeTimeLock xs
-    decodeTimeExpire o = do
-        Ledger.Allegra.RequireTimeExpire . SlotNo <$> (o .: "slot")
-    decodeTimeStart o = do
-        Ledger.Allegra.RequireTimeStart . SlotNo <$> (o .: "slot")
+        mkRequireMOf @era n <$> traverse decodeNativeScript xs
+    decodeTimeExpire o =
+        mkTimeExpire @era . SlotNo <$> (o .: "slot")
+    decodeTimeStart o =
+        mkTimeStart @era . SlotNo <$> (o .: "slot")
 
 decodeTip
     :: Json.Value
