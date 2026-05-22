@@ -6,6 +6,12 @@ module Ogmios.Data.Ledger.PredicateFailure.Mary where
 
 import Ogmios.Prelude
 
+import Cardano.Ledger.Address
+    ( unWithdrawals
+    )
+import Cardano.Ledger.BaseTypes
+    ( mismatchSupplied
+    )
 import Ogmios.Data.Ledger.PredicateFailure
     ( MultiEraPredicateFailure (..)
     )
@@ -18,6 +24,7 @@ import Ogmios.Data.Ledger.PredicateFailure.Shelley
     )
 
 import qualified Cardano.Ledger.Shelley.Rules as Sh
+import qualified Data.Map.NonEmpty as NEMap
 
 encodeLedgerFailure
     :: Sh.ShelleyLedgerPredFailure MaryEra
@@ -27,3 +34,13 @@ encodeLedgerFailure = \case
         encodeUtxowFailure (encodeUtxoFailure ShelleyBasedEraMary) e
     Sh.DelegsFailure e ->
         encodeDelegsFailure e
+    Sh.ShelleyIncompleteWithdrawals ws ->
+        IncompleteWithdrawals
+            { withdrawals = mismatchSupplied <$> NEMap.toMap ws
+            }
+    -- TODO: both ledger failures currently fold into IncompleteWithdrawals;
+    -- introduce a dedicated WithdrawalsMissingAccounts variant.
+    Sh.ShelleyWithdrawalsMissingAccounts ws ->
+        IncompleteWithdrawals
+            { withdrawals = unWithdrawals ws
+            }

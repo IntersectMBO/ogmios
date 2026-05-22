@@ -9,11 +9,11 @@ import Ogmios.Prelude
 import Cardano.Ledger.Alonzo.Plutus.Evaluate
     ( CollectError (..)
     )
+import Cardano.Ledger.Address
+    ( unWithdrawals
+    )
 import Cardano.Ledger.Core
     ( EraRule
-    )
-import Cardano.Ledger.State
-    ( UTxO (..)
     )
 import Ogmios.Data.Ledger.PredicateFailure
     ( ContextErrorInAnyEra (..)
@@ -35,9 +35,12 @@ import Relude.Unsafe
 import qualified Cardano.Ledger.Alonzo.Rules as Al
 import Cardano.Ledger.BaseTypes
     ( Mismatch (..)
+    , mismatchSupplied
     )
 import qualified Cardano.Ledger.Shelley.Rules as Sh
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
+import qualified Data.Map.NonEmpty as NEMap
+import qualified Data.Set.NonEmpty as NESet
 import qualified Ogmios.Data.Ledger.PredicateFailure.Shelley as Shelley
 
 encodeLedgerFailure
@@ -52,6 +55,16 @@ encodeLedgerFailure = \case
             e
     Sh.DelegsFailure e ->
         encodeDelegsFailure e
+    Sh.ShelleyIncompleteWithdrawals ws ->
+        IncompleteWithdrawals
+            { withdrawals = mismatchSupplied <$> NEMap.toMap ws
+            }
+    -- TODO: both ledger failures currently fold into IncompleteWithdrawals;
+    -- introduce a dedicated WithdrawalsMissingAccounts variant.
+    Sh.ShelleyWithdrawalsMissingAccounts ws ->
+        IncompleteWithdrawals
+            { withdrawals = unWithdrawals ws
+            }
 
 encodeUtxowFailure
     :: forall era.
@@ -63,21 +76,21 @@ encodeUtxowFailure
     -> MultiEraPredicateFailure
 encodeUtxowFailure era encodeUtxoFailureInEra = \case
     Al.MissingRedeemers redeemers ->
-        let missingRedeemers = ScriptPurposeItemInAnyEra . (era,) . fst <$> redeemers
+        let missingRedeemers = ScriptPurposeItemInAnyEra . (era,) . fst <$> toList redeemers
          in MissingRedeemers { missingRedeemers }
     Al.MissingRequiredDatums missingDatums _providedDatums ->
-        MissingDatums { missingDatums }
+        MissingDatums { missingDatums = NESet.toSet missingDatums }
     Al.NotAllowedSupplementalDatums extraneousDatums _acceptableDatums ->
-        ExtraneousDatums { extraneousDatums }
+        ExtraneousDatums { extraneousDatums = NESet.toSet extraneousDatums }
     Al.ExtraRedeemers redeemers ->
-        let extraneousRedeemers = ScriptPurposeIndexInAnyEra . (era,) <$> redeemers
+        let extraneousRedeemers = ScriptPurposeIndexInAnyEra . (era,) <$> toList redeemers
          in ExtraneousRedeemers { extraneousRedeemers }
     Al.PPViewHashesDontMatch (Mismatch providedIntegrityHash computedIntegrityHash) ->
         ScriptIntegrityHashMismatch { providedIntegrityHash, computedIntegrityHash }
-    Al.MissingRequiredSigners keys ->
-        MissingSignatures keys
+    Al.ScriptIntegrityHashMismatch (Mismatch providedIntegrityHash computedIntegrityHash) _ ->
+        ScriptIntegrityHashMismatch { providedIntegrityHash, computedIntegrityHash }
     Al.UnspendableUTxONoDatumHash orphanScriptInputs ->
-        OrphanScriptInputs { orphanScriptInputs }
+        OrphanScriptInputs { orphanScriptInputs = NESet.toSet orphanScriptInputs }
     Al.ShelleyInAlonzoUtxowPredFailure e ->
         Shelley.encodeUtxowFailure encodeUtxoFailureInEra e
 
@@ -91,14 +104,17 @@ encodeUtxoFailure
     -> MultiEraPredicateFailure
 encodeUtxoFailure era encodeUtxosFailure' = \case
     Al.BadInputsUTxO inputs ->
-        UnknownUtxoReference inputs
+        UnknownUtxoReference (NESet.toSet inputs)
     Al.OutsideValidityIntervalUTxO validityInterval currentSlot ->
         TransactionOutsideValidityInterval { validityInterval, currentSlot }
     Al.OutputTooBigUTxO outs ->
-        let culpritOutputs = (\(_, _, out) -> TxOutInAnyEra (toShelleyBasedEra era, out)) <$> outs in
+        let culpritOutputs = (\(_, _, out) -> TxOutInAnyEra (toShelleyBasedEra era, out)) <$> toList outs in
         ValueSizeAboveLimit culpritOutputs
     Al.MaxTxSizeUTxO (Mismatch measuredSize maximumSize) ->
-        TransactionTooLarge { measuredSize, maximumSize }
+        TransactionTooLarge
+            { measuredSize = toInteger measuredSize
+            , maximumSize = toInteger maximumSize
+            }
     Al.InputSetEmptyUTxO ->
         EmptyInputSet
     Al.FeeTooSmallUTxO (Mismatch suppliedFee minimumRequiredFee)  ->
@@ -108,24 +124,22 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
         let valueProduced = ValueInAnyEra (toShelleyBasedEra era, produced) in
         ValueNotConserved { valueConsumed, valueProduced }
     Al.WrongNetwork expectedNetwork invalidAddrs ->
-        let invalidEntities = DiscriminatedAddresses invalidAddrs in
+        let invalidEntities = DiscriminatedAddresses (NESet.toSet invalidAddrs) in
         NetworkMismatch { expectedNetwork, invalidEntities }
     Al.WrongNetworkWithdrawal expectedNetwork invalidAccts ->
-        let invalidEntities = DiscriminatedRewardAccounts invalidAccts in
+        let invalidEntities = DiscriminatedRewardAccounts (NESet.toSet invalidAccts) in
         NetworkMismatch { expectedNetwork, invalidEntities }
     Al.OutputTooSmallUTxO outs ->
         let insufficientlyFundedOutputs =
-                (\out -> (TxOutInAnyEra (toShelleyBasedEra era, out), Nothing)) <$> outs
+                (\out -> (TxOutInAnyEra (toShelleyBasedEra era, out), Nothing)) <$> toList outs
          in InsufficientAdaInOutput { insufficientlyFundedOutputs }
     Al.OutputBootAddrAttrsTooBig outs ->
-        let culpritOutputs = (\out -> TxOutInAnyEra (toShelleyBasedEra era, out)) <$> outs in
+        let culpritOutputs = (\out -> TxOutInAnyEra (toShelleyBasedEra era, out)) <$> toList outs in
         BootstrapAddressAttributesTooLarge { culpritOutputs }
-    Al.TriesToForgeADA ->
-        MintingOrBurningAda
     Al.InsufficientCollateral providedCollateral minimumRequiredCollateral ->
         InsufficientCollateral { providedCollateral, minimumRequiredCollateral }
     Al.ScriptsNotPaidUTxO utxo ->
-        CollateralInputLockedByScript (Map.keys $ unUTxO utxo)
+        CollateralInputLockedByScript (Map.keys (NEMap.toMap utxo))
     Al.WrongNetworkInTxBody (Mismatch _providedNetwork expectedNetwork) ->
         let invalidEntities = DiscriminatedTransaction in
         NetworkMismatch { expectedNetwork, invalidEntities }
@@ -137,7 +151,10 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
     Al.NoCollateralInputs{} ->
         MissingCollateralInputs
     Al.TooManyCollateralInputs (Mismatch countedCollateralInputs maximumCollateralInputs) ->
-        TooManyCollateralInputs { maximumCollateralInputs, countedCollateralInputs }
+        TooManyCollateralInputs
+            { maximumCollateralInputs = fromIntegral maximumCollateralInputs
+            , countedCollateralInputs = fromIntegral countedCollateralInputs
+            }
     Al.ExUnitsTooBigUTxO (Mismatch providedExUnits maximumExUnits) ->
         ExecutionUnitsTooLarge { maximumExUnits, providedExUnits }
     Al.UtxosFailure e ->
@@ -154,7 +171,7 @@ encodeUtxosFailure era = \case
     Al.ValidationTagMismatch validationTag mismatchReason ->
         ValidationTagMismatch { validationTag, mismatchReason }
     Al.CollectErrors errors ->
-        pickPredicateFailure (encodeCollectErrors era errors)
+        pickPredicateFailure (encodeCollectErrors era (toList errors))
     Al.UpdateFailure{} ->
         InvalidProtocolParametersUpdate
 
