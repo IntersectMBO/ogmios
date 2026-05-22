@@ -18,12 +18,14 @@ import Cardano.Ledger.BaseTypes
     , BoundedRational (..)
     , activeSlotVal
     , mkActiveSlotCoeff
+    , unNonZero
     )
 import Cardano.Ledger.Coin
     ( Coin (..)
-    , CompactForm (..)
     , rationalToCoinViaFloor
-    , word64ToCoin
+    )
+import Cardano.Ledger.Compactible
+    ( fromCompact
     )
 import Cardano.Ledger.Credential
     ( Credential (..)
@@ -35,8 +37,7 @@ import Cardano.Ledger.Shelley.Governance
     ( EraGov
     )
 import Cardano.Ledger.Shelley.LedgerState
-    ( AccountState (..)
-    , EpochState (..)
+    ( EpochState (..)
     , NewEpochState (..)
     , prevPParamsEpochStateL
     )
@@ -49,11 +50,11 @@ import Cardano.Ledger.Slot
     ( EpochSize (..)
     )
 import Cardano.Ledger.State
-    ( SnapShot (..)
+    ( ActiveStake (..)
+    , SnapShot (..)
     , SnapShots (..)
-    , Stake (..)
-    , sumAllStake
-    , sumStakePerPool
+    , StakeWithDelegation (..)
+    , casReserves
     )
 import Cardano.Ledger.Val
     ( (<->)
@@ -98,7 +99,7 @@ data RewardsProvenance = RewardsProvenance
   , activeStake :: !Coin
   -- ^ The amount of Lovelace that is delegated during the given epoch.
   , pools :: Map
-      (KeyHash 'StakePool)
+      (KeyHash StakePool)
       (PoolRewardsInfo)
   -- ^ Stake pools specific information needed to compute the rewards for its members.
   }
@@ -115,7 +116,7 @@ data PoolRewardsInfo = PoolRewardsInfo
   -- ^ The number of blocks the stake pool produced
   , poolLeaderReward :: !Coin
   -- ^ The leader reward
-  , poolDelegators :: !(Map (Credential 'Staking) Coin)
+  , poolDelegators :: !(Map (Credential Staking) Coin)
   -- ^ A map of all its delegators, and their respective stake.
   }
   deriving (Show, Eq, Ord, Generic)
@@ -165,11 +166,11 @@ rewardsProvenance slotsPerEpoch b@(BlocksMade b') es@(EpochState acnt _ ss _) ma
         , pools
         }
   where
-    SnapShot stake delegs poolParams =
+    SnapShot{ssActiveStake, ssTotalActiveStake, ssStakePoolsSnapShot} =
         ssStakeGo ss
 
     Coin reserves =
-        asReserves acnt
+        casReserves acnt
 
     pr =
       es ^. prevPParamsEpochStateL
@@ -203,62 +204,53 @@ rewardsProvenance slotsPerEpoch b@(BlocksMade b') es@(EpochState acnt _ ss _) ma
         Coin $ rPot - deltaT1
 
     activeStake =
-        sumAllStake stake
+        unNonZero ssTotalActiveStake
 
     totalStake =
         circulation es maxSupply
 
-    stakePerPool =
-        sumStakePerPool delegs stake
-
-    mkPoolRewardInfoCurry =
-      mkPoolRewardInfo
-        pr
-        availableRewards
-        b
-        (fromIntegral blocksCount)
-        stake
-        delegs
-        stakePerPool
-        totalStake
-        activeStake
-
-    delegators :: Map (KeyHash 'StakePool) (Map (Credential 'Staking) Coin)
+    delegators :: Map (KeyHash StakePool) (Map (Credential Staking) Coin)
     delegators =
         VMap.foldlWithKey
-            (flipFold $ \account ->
-                let balance = maybe mempty (word64ToCoin . unCompactCoin) (VMap.lookup account (unStake stake))
-                 in Map.alter $ Just . \case
-                        Nothing -> Map.singleton account balance
-                        Just m -> Map.insert account balance m
+            (\acc cred (StakeWithDelegation nonZeroStake poolId) ->
+                let balance = fromCompact (unNonZero nonZeroStake)
+                 in Map.insertWith (<>) poolId
+                        (Map.singleton cred balance)
+                        acc
             )
             mempty
-            delegs
+            (unActiveStake ssActiveStake)
 
     pools =
-        poolParams
-            & VMap.map mkPoolRewardInfoCurry
+        ssStakePoolsSnapShot
             & VMap.toMap
-            & Map.mapWithKey (\poolId -> \case
-                Left s -> PoolRewardsInfo
-                    { poolRelativeStake = s
-                    , poolPot = mempty
-                    , poolBlocks = 0
-                    , poolLeaderReward = mempty
-                    , poolDelegators = fromMaybe mempty (Map.lookup poolId delegators)
-                    }
-                Right i -> PoolRewardsInfo
-                    { poolRelativeStake = Ledger.poolRelativeStake i
-                    , poolPot = Ledger.poolPot i
-                    , poolBlocks = Ledger.poolBlocks i
-                    , poolLeaderReward = lRewardAmount $ Ledger.poolLeaderReward i
-                    , poolDelegators = fromMaybe mempty (Map.lookup poolId delegators)
-                    }
+            & Map.mapWithKey (\poolId snap -> case
+                  mkPoolRewardInfo
+                      pr
+                      availableRewards
+                      b
+                      (fromIntegral blocksCount)
+                      totalStake
+                      ssTotalActiveStake
+                      poolId
+                      snap
+                of
+                  Left s -> PoolRewardsInfo
+                      { poolRelativeStake = s
+                      , poolPot = mempty
+                      , poolBlocks = 0
+                      , poolLeaderReward = mempty
+                      , poolDelegators = fromMaybe mempty (Map.lookup poolId delegators)
+                      }
+                  Right i -> PoolRewardsInfo
+                      { poolRelativeStake = Ledger.poolRelativeStake i
+                      , poolPot = Ledger.poolPot i
+                      , poolBlocks = Ledger.poolBlocks i
+                      , poolLeaderReward = lRewardAmount $ Ledger.poolLeaderReward i
+                      , poolDelegators = fromMaybe mempty (Map.lookup poolId delegators)
+                      }
               )
 
 circulation :: EpochState era -> Coin -> Coin
 circulation (EpochState acnt _ _ _) supply =
-  supply <-> asReserves acnt
-
-flipFold :: (k -> v -> a -> a) -> (a -> k -> v -> a)
-flipFold f a k v = f k v a
+  supply <-> casReserves acnt
