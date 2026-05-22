@@ -3,8 +3,10 @@
 --  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 module Ogmios.Data.Json.Dijkstra
-    ( encodeNativeScript
+    ( encodeBlock
+    , encodeNativeScript
     , encodeScript
+    , encodeTx
     , encodeTxOut
     , encodeUtxo
     , encodeDelegCert
@@ -33,10 +35,12 @@ import qualified Cardano.Ledger.Alonzo.Plutus.TxInfo as Al
 import qualified Cardano.Ledger.Alonzo.Scripts as Al
 import qualified Cardano.Ledger.Babbage.TxBody as Ba
 import qualified Cardano.Ledger.Babbage.TxInfo as Ba
+import qualified Cardano.Ledger.Block as Ledger
 import qualified Cardano.Ledger.Conway.Governance as Cn
 import qualified Cardano.Ledger.Conway.TxInfo as Cn
 import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.Dijkstra.Scripts as Di
+import qualified Cardano.Ledger.Dijkstra.Tx as Di
 import qualified Cardano.Ledger.Dijkstra.TxCert as Di
 import qualified Cardano.Ledger.Dijkstra.TxInfo as Di
 import qualified Cardano.Ledger.Mary.Value as Ma
@@ -46,9 +50,50 @@ import qualified Cardano.Ledger.Shelley.API as Sh
 import qualified Data.Map.Strict as Map
 
 import qualified Ogmios.Data.Json.Alonzo as Alonzo
+import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Conway as Conway
 import qualified Ogmios.Data.Json.Mary as Mary
 import qualified Ogmios.Data.Json.Shelley as Shelley
+
+import Ouroboros.Consensus.Shelley.Ledger.Block
+    ( ShelleyBlock (..)
+    )
+
+encodeBlock
+    :: (MetadataFormat, IncludeCbor)
+    -> ShelleyBlock (Praos StandardCrypto) DijkstraEra
+    -> Json
+encodeBlock opts (ShelleyBlock (Ledger.Block blkHeader txs) headerHash) =
+    encodeObject
+        ( "type" .= encodeText "praos"
+        <>
+          "era" .= encodeText "dijkstra"
+        <>
+          "id" .= Shelley.encodeShelleyHash headerHash
+        <>
+          Babbage.encodeHeader blkHeader
+        <>
+          "transactions" .= encodeFoldable (encodeTx opts . Di.unDijkstraTx) (txs ^. Ledger.txSeqBlockBodyL)
+        )
+
+-- TODO(dijkstra): minimal body — emits txId, isValid, and (optionally)
+-- raw CBOR. Body / witness / metadata destructuring against the new
+-- DijkstraTxBody surface is a follow-up.
+encodeTx
+    :: (MetadataFormat, IncludeCbor)
+    -> Di.DijkstraTx Ledger.TopTx DijkstraEra
+    -> Json
+encodeTx (_fmt, opts) tx@Di.DijkstraTx{Di.dtBody, Di.dtIsValid} =
+    encodeObject
+        ( Shelley.encodeTxId (Ledger.txIdTxBody @DijkstraEra dtBody)
+       <>
+        "spends" .= Alonzo.encodeIsValid dtIsValid
+       <>
+        if includeTransactionCbor opts then
+           "cbor" .= encodeByteStringBase16 (encodeCbor @DijkstraEra tx)
+        else
+           mempty
+        )
 
 encodeNativeScript
     :: forall era.

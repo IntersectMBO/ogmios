@@ -68,6 +68,9 @@ import Cardano.Ledger.Conway
 import Cardano.Ledger.Conway.Tx
     ( unConwayTx
     )
+import Cardano.Ledger.Dijkstra.Tx
+    ( unDijkstraTx
+    )
 import Cardano.Ledger.Mary
     ( ApplyTxError (MaryApplyTxError)
     )
@@ -142,6 +145,7 @@ import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Byron as Byron
 import qualified Ogmios.Data.Json.Conway as Conway
+import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
 import qualified Ogmios.Data.Json.Mary as Mary
 import qualified Ogmios.Data.Json.Shelley as Shelley
 
@@ -194,6 +198,8 @@ encodeBlock opts = \case
         Babbage.encodeBlock opts blk
     BlockConway blk ->
         Conway.encodeBlock opts blk
+    BlockDijkstra blk ->
+        Dijkstra.encodeBlock opts blk
 
 encodeSubmitTransactionError
     :: (Rpc.FaultCode -> String -> Maybe Json -> Json)
@@ -226,6 +232,8 @@ encodeSubmitTransactionError reject = \case
             (Shelley.encodeLedgerFailure <$> xs)
     ApplyTxErrByron{} ->
         error "encodeSubmitTransactionError: unsupported Byron transaction."
+    ApplyTxErrDijkstra{} ->
+        error "encodeSubmitTransactionError: Dijkstra submission errors not yet wired."
 
 encodeSerializedTransaction
     :: (PraosCrypto crypto, TPraos.PraosCrypto crypto)
@@ -246,6 +254,8 @@ encodeSerializedTransaction =
         GenTxBabbage tx ->
             toCBOR tx
         GenTxConway tx ->
+            toCBOR tx
+        GenTxDijkstra tx ->
             toCBOR tx
 
 encodeTip
@@ -270,6 +280,8 @@ encodeTx
 encodeTx opts = \case
     GenTxConway (ShelleyTx _ x) ->
         Conway.encodeTx opts (unConwayTx x)
+    GenTxDijkstra (ShelleyTx _ x) ->
+        Dijkstra.encodeTx opts (unDijkstraTx x)
     GenTxBabbage (ShelleyTx _ x) ->
         Babbage.encodeTx opts (unBabbageTx x)
     GenTxAlonzo (ShelleyTx _ x) ->
@@ -287,6 +299,8 @@ encodeGenTxId
     :: GenTxId (CardanoBlock crypto)
     -> Json
 encodeGenTxId = encodeObject . \case
+    GenTxIdDijkstra (ShelleyTxId x) ->
+        Shelley.encodeTxId x
     GenTxIdConway (ShelleyTxId x) ->
         Shelley.encodeTxId x
     GenTxIdBabbage (ShelleyTxId x) ->
@@ -333,6 +347,7 @@ encodeDeserialisationFailure reject errs =
                 ShelleyBasedEraAlonzo  -> "alonzo"
                 ShelleyBasedEraBabbage -> "babbage"
                 ShelleyBasedEraConway  -> "conway"
+                ShelleyBasedEraDijkstra -> "dijkstra"
          in
             k .= encodeDecoderError size e
 
