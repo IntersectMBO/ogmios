@@ -47,8 +47,32 @@ import Ogmios.Data.Json.Prelude
 import Cardano.Ledger.Binary
     ( ToCBOR (..)
     )
+import Cardano.Ledger.Allegra
+    ( ApplyTxError (AllegraApplyTxError)
+    )
+import Cardano.Ledger.Alonzo
+    ( ApplyTxError (AlonzoApplyTxError)
+    )
+import Cardano.Ledger.Alonzo.Tx
+    ( unAlonzoTx
+    )
+import Cardano.Ledger.Babbage
+    ( ApplyTxError (BabbageApplyTxError)
+    )
+import Cardano.Ledger.Babbage.Tx
+    ( unBabbageTx
+    )
+import Cardano.Ledger.Conway
+    ( ApplyTxError (ConwayApplyTxError)
+    )
+import Cardano.Ledger.Conway.Tx
+    ( unConwayTx
+    )
+import Cardano.Ledger.Mary
+    ( ApplyTxError (MaryApplyTxError)
+    )
 import Cardano.Ledger.Shelley.API
-    ( ApplyTxError (..)
+    ( ApplyTxError (ShelleyApplyTxError)
     )
 import Cardano.Network.Protocol.NodeToClient
     ( GenTx
@@ -182,22 +206,22 @@ encodeSubmitTransactionError reject = \case
             \submit a transaction near an era boundary (i.e. at the moment of a hard-fork). \
             \Retrying should help."
             (pure $ encodeEraMismatch e)
-    ApplyTxErrConway (ApplyTxError xs) ->
+    ApplyTxErrConway (ConwayApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Conway.encodeLedgerFailure <$> xs)
-    ApplyTxErrBabbage (ApplyTxError xs) ->
+    ApplyTxErrBabbage (BabbageApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Babbage.encodeLedgerFailure <$> xs)
-    ApplyTxErrAlonzo (ApplyTxError xs) ->
+    ApplyTxErrAlonzo (AlonzoApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Alonzo.encodeLedgerFailure <$> xs)
-    ApplyTxErrMary (ApplyTxError xs) ->
+    ApplyTxErrMary (MaryApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Mary.encodeLedgerFailure <$> xs)
-    ApplyTxErrAllegra (ApplyTxError xs) ->
+    ApplyTxErrAllegra (AllegraApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Allegra.encodeLedgerFailure <$> xs)
-    ApplyTxErrShelley (ApplyTxError xs) ->
+    ApplyTxErrShelley (ShelleyApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Shelley.encodeLedgerFailure <$> xs)
     ApplyTxErrByron{} ->
@@ -245,11 +269,11 @@ encodeTx
     -> Json
 encodeTx opts = \case
     GenTxConway (ShelleyTx _ x) ->
-        Conway.encodeTx opts x
+        Conway.encodeTx opts (unConwayTx x)
     GenTxBabbage (ShelleyTx _ x) ->
-        Babbage.encodeTx opts x
+        Babbage.encodeTx opts (unBabbageTx x)
     GenTxAlonzo (ShelleyTx _ x) ->
-        Alonzo.encodeTx opts x
+        Alonzo.encodeTx opts (unAlonzoTx x)
     GenTxMary (ShelleyTx _ x) ->
         Mary.encodeTx opts x
     GenTxAllegra (ShelleyTx _ x) ->
