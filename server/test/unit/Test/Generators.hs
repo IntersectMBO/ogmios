@@ -22,7 +22,7 @@ import Cardano.Ledger.Coin
     ( Coin (..)
     )
 import Cardano.Ledger.Core
-    ( EraSegWits (..)
+    ( EraBlockBody (..)
     )
 import Cardano.Ledger.Keys
     ( KeyRole (..)
@@ -33,8 +33,23 @@ import Cardano.Ledger.Plutus.Data
 import Cardano.Ledger.Plutus.TxInfo
     ( transExUnits
     )
+import Cardano.Ledger.Allegra
+    ( ApplyTxError (AllegraApplyTxError)
+    )
+import Cardano.Ledger.Alonzo
+    ( ApplyTxError (AlonzoApplyTxError)
+    )
+import Cardano.Ledger.Babbage
+    ( ApplyTxError (BabbageApplyTxError)
+    )
+import Cardano.Ledger.Conway
+    ( ApplyTxError (ConwayApplyTxError)
+    )
+import Cardano.Ledger.Mary
+    ( ApplyTxError (MaryApplyTxError)
+    )
 import Cardano.Ledger.Shelley.API.Mempool
-    ( ApplyTxError (..)
+    ( ApplyTxError (ShelleyApplyTxError)
     )
 import Cardano.Ledger.Shelley.UTxO
     ( UTxO (..)
@@ -59,12 +74,14 @@ import Data.Type.Equality
     ( testEquality
     , (:~:) (..)
     )
+import Cardano.Ledger.State
+    ( ChainAccountState (..)
+    , StakePoolParams
+    )
 import Ogmios.Data.Json.Query
-    ( AccountState (..)
-    , DRepSummary (..)
+    ( DRepSummary (..)
     , GenesisConfig
     , Interpreter
-    , PoolParams
     , PoolRewardsInfo (..)
     , QueryResult
     , RewardAccountSummaries
@@ -197,8 +214,8 @@ genBlock = oneof
   where
     genTPraosBlockFrom
         :: forall era.
-            ( Arbitrary (Ledger.Tx era)
-            , EraSegWits era
+            ( Arbitrary (Ledger.Tx Ledger.TopTx era)
+            , EraBlockBody era
             )
         => Gen (ShelleyBlock (TPraos StandardCrypto) era)
     genTPraosBlockFrom =
@@ -207,21 +224,21 @@ genBlock = oneof
               , ShelleyBlock
                   <$> (Ledger.Block
                         <$> arbitrary
-                        <*> (toTxSeq @era <$> arbitrary `suchThat` (not . null))
+                        <*> (mkBlockBodyFromTxs @era <$> arbitrary `suchThat` (not . null))
                       )
                   <*> arbitrary
               )
             , (1
               , ShelleyBlock
-                  <$> (Ledger.Block <$> arbitrary <*> pure (toTxSeq @era mempty))
+                  <$> (Ledger.Block <$> arbitrary <*> pure (mkBlockBodyFromTxs @era mempty))
                   <*> arbitrary
               )
             ]
 
     genPraosBlockFrom
         :: forall era.
-            ( Arbitrary (Ledger.Tx era)
-            , EraSegWits era
+            ( Arbitrary (Ledger.Tx Ledger.TopTx era)
+            , EraBlockBody era
             )
         => Gen (ShelleyBlock (Praos StandardCrypto) era)
     genPraosBlockFrom =
@@ -230,16 +247,25 @@ genBlock = oneof
               , ShelleyBlock
                   <$> (Ledger.Block
                         <$> arbitrary
-                        <*> (toTxSeq @era <$> arbitrary `suchThat` (not . null))
+                        <*> (mkBlockBodyFromTxs @era <$> arbitrary `suchThat` (not . null))
                       )
                   <*> arbitrary
               )
             , (1
               , ShelleyBlock
-                  <$> (Ledger.Block <$> arbitrary <*> pure (toTxSeq @era mempty))
+                  <$> (Ledger.Block <$> arbitrary <*> pure (mkBlockBodyFromTxs @era mempty))
                   <*> arbitrary
               )
             ]
+
+-- | Build a BlockBody from a StrictSeq of top-level transactions.
+-- Replaces the old `toTxSeq` from the removed `EraSegWits` class.
+mkBlockBodyFromTxs
+    :: forall era. EraBlockBody era
+    => StrictSeq (Ledger.Tx Ledger.TopTx era)
+    -> Ledger.BlockBody era
+mkBlockBodyFromTxs txs =
+    mkBasicBlockBody @era & txSeqBlockBodyL .~ txs
 
 genTxId :: Gen Ledger.TxId
 genTxId = arbitrary
@@ -303,12 +329,12 @@ genSubmitResult = frequency
 genHardForkApplyTxErr :: Gen (HardForkApplyTxErr (CardanoEras StandardCrypto))
 genHardForkApplyTxErr = frequency
     [ ( 1, HardForkApplyTxErrWrongEra <$> genMismatchEraInfo)
-    , ( 5, ApplyTxErrShelley . ApplyTxError . pure <$> arbitrary )
-    , ( 5, ApplyTxErrAllegra . ApplyTxError . pure <$> arbitrary )
-    , ( 5, ApplyTxErrMary . ApplyTxError . pure <$> arbitrary )
-    , ( 10, ApplyTxErrAlonzo . ApplyTxError . pure <$> arbitrary )
-    , ( 25, ApplyTxErrBabbage . ApplyTxError . pure <$> arbitrary )
-    , ( 25, ApplyTxErrConway . ApplyTxError . pure <$> arbitrary )
+    , ( 5, ApplyTxErrShelley . ShelleyApplyTxError . pure <$> arbitrary )
+    , ( 5, ApplyTxErrAllegra . AllegraApplyTxError . pure <$> arbitrary )
+    , ( 5, ApplyTxErrMary . MaryApplyTxError . pure <$> arbitrary )
+    , ( 10, ApplyTxErrAlonzo . AlonzoApplyTxError . pure <$> arbitrary )
+    , ( 25, ApplyTxErrBabbage . BabbageApplyTxError . pure <$> arbitrary )
+    , ( 25, ApplyTxErrConway . ConwayApplyTxError . pure <$> arbitrary )
     ]
 
 genEvaluateTransactionResponse :: Gen (EvaluateTransactionResponse Block)
@@ -758,28 +784,12 @@ genCommitteeMemberState = Ledger.CommitteeMemberState
 
 genPoolDistrResult
     :: forall crypto. (crypto ~ StandardCrypto)
-    => Proxy (QueryResult crypto (Consensus.PoolDistr crypto))
-    -> Gen (QueryResult crypto (Consensus.PoolDistr crypto))
+    => Proxy (QueryResult crypto Ledger.PoolDistr)
+    -> Gen (QueryResult crypto Ledger.PoolDistr)
 genPoolDistrResult _ = frequency
     [ (1, Left <$> genMismatchEraInfo)
-    , (10, Right . fromLedgerPoolDistr <$> arbitrary)
+    , (10, Right <$> arbitrary)
     ]
-  where
-    -- FIXME: See note on imports.
-    fromLedgerPoolDistr :: Ledger.PoolDistr -> Consensus.PoolDistr crypto
-    fromLedgerPoolDistr =
-        Consensus.PoolDistr . Map.map fromLedgerIndividualPoolStake . Ledger.unPoolDistr
-
-    fromLedgerIndividualPoolStake :: Ledger.IndividualPoolStake -> Consensus.IndividualPoolStake crypto
-    fromLedgerIndividualPoolStake ips = Consensus.IndividualPoolStake
-        { Consensus.individualPoolStake    = Ledger.individualPoolStake ips
-        , Consensus.individualPoolStakeVrf = ips
-            & Ledger.individualPoolStakeVrf
-            & Ledger.unVRFVerKeyHash
-            & hashToBytes
-            & hashFromBytes
-            & fromJust
-        }
 
 genUTxOResult
     :: forall crypto era. (crypto ~ StandardCrypto, Typeable era)
@@ -875,6 +885,7 @@ genGenesisConfigAlonzo =
         <*> arbitrary
         <*> arbitrary
         <*> arbitrary
+        <*> arbitrary
 
 genGenesisConfigConway
     :: Gen (GenesisConfig ConwayEra)
@@ -901,19 +912,19 @@ genStakePoolsPerformancesResult _ = frequency
 
 genAccountStateResult
     :: forall crypto. (crypto ~ StandardCrypto)
-    => Proxy (QueryResult crypto AccountState)
-    -> Gen (QueryResult crypto AccountState)
+    => Proxy (QueryResult crypto ChainAccountState)
+    -> Gen (QueryResult crypto ChainAccountState)
 genAccountStateResult _ = frequency
     [ (1, Left <$> genMismatchEraInfo)
     , (10, Right <$> genAccountState)
     ]
   where
-    genAccountState = AccountState <$> arbitrary <*> arbitrary
+    genAccountState = ChainAccountState <$> arbitrary <*> arbitrary
 
 genPoolParametersResult
     :: forall crypto. (crypto ~ StandardCrypto)
-    => Proxy (QueryResult crypto (Map (Ledger.KeyHash 'StakePool) (Maybe PoolParams, StrictMaybe Coin)))
-    -> Gen (QueryResult crypto (Map (Ledger.KeyHash 'StakePool) (Maybe PoolParams, StrictMaybe Coin)))
+    => Proxy (QueryResult crypto (Map (Ledger.KeyHash StakePool) (Maybe StakePoolParams, StrictMaybe Coin)))
+    -> Gen (QueryResult crypto (Map (Ledger.KeyHash StakePool) (Maybe StakePoolParams, StrictMaybe Coin)))
 genPoolParametersResult _ = frequency
     [ (1, Left <$> genMismatchEraInfo)
     , (10, Right <$> arbitrary)
@@ -921,8 +932,8 @@ genPoolParametersResult _ = frequency
 
 genPoolParametersResultNoStake
     :: forall crypto. (crypto ~ StandardCrypto)
-    => Proxy (QueryResult crypto (Map (Ledger.KeyHash 'StakePool) PoolParams))
-    -> Gen (QueryResult crypto (Map (Ledger.KeyHash 'StakePool) PoolParams))
+    => Proxy (QueryResult crypto (Map (Ledger.KeyHash StakePool) StakePoolParams))
+    -> Gen (QueryResult crypto (Map (Ledger.KeyHash StakePool) StakePoolParams))
 genPoolParametersResultNoStake _ = frequency
     [ (1, Left <$> genMismatchEraInfo)
     , (10, Right <$> arbitrary)
