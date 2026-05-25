@@ -27,7 +27,8 @@ import Data.List
     , (!!)
     )
 import Network.TypedProtocol.Codec
-    ( Codec (..)
+    ( Codec
+    , CodecF (..)
     , SomeMessage (..)
     , runDecoder
     )
@@ -40,6 +41,9 @@ import Ogmios.App.Protocol
     )
 import Ogmios.App.Protocol.TxMonitor
     ( mkTxMonitorClient
+    )
+import Control.Monad.Class.MonadThrow
+    ( MonadEvaluate
     )
 import Ogmios.Control.Exception
     ( MonadCatch
@@ -214,7 +218,7 @@ spec = parallel $ do
 type Protocol = LocalTxMonitor (GenTxId Block) (GenTx Block) SlotNo
 
 withTxMonitorClient
-    :: (MonadCatch m, MonadOuroboros m)
+    :: (MonadCatch m, MonadEvaluate m, MonadOuroboros m)
     => ((TxMonitorMessage Block -> m ()) ->  m Json -> m a)
     -> StdGen
     -> m a

@@ -1754,7 +1754,7 @@
   , "Language":
     { "title": "Language"
     , "type": "string"
-    , "enum": [ "plutus:v1", "plutus:v2", "plutus:v3" ]
+    , "enum": [ "plutus:v1", "plutus:v2", "plutus:v3", "plutus:v4" ]
     }
 
   , "KesVerificationKey":
@@ -2421,7 +2421,7 @@
         , "properties":
           { "language":
             { "type": "string"
-            , "enum": [ "plutus:v1", "plutus:v2", "plutus:v3" ]
+            , "enum": [ "plutus:v1", "plutus:v2", "plutus:v3", "plutus:v4" ]
             }
           , "cbor":
             { "type": "string"

@@ -187,6 +187,7 @@ library
     , json-rpc
     , lens-aeson
     , memory
+    , mempack
     , mtl
     , optparse-applicative
     , ouroboros-consensus
@@ -349,11 +350,13 @@ test-suite unit
     , base >=4.7 && <5
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-allegra
     , cardano-ledger-alonzo
     , cardano-ledger-alonzo:testlib
     , cardano-ledger-api
     , cardano-ledger-babbage
     , cardano-ledger-binary
+    , cardano-ledger-conway
     , cardano-ledger-conway:testlib
     , cardano-ledger-core
     , cardano-ledger-mary

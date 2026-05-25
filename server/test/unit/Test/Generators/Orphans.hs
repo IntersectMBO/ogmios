@@ -12,6 +12,10 @@ import Ogmios.Prelude
 import Cardano.Ledger.Alonzo.Core
     ( AlonzoEraScript (..)
     )
+import Cardano.Ledger.Alonzo.Plutus.Context
+    ( EraPlutusContext
+    , supportedLanguages
+    )
 import Ogmios.Data.Json.Query
     ( RewardAccountSummary (..)
     )
@@ -44,10 +48,7 @@ instance Arbitrary ScriptPurposeIndexInAnyEra where
 instance Arbitrary RewardAccountSummary where
     arbitrary = genericArbitrary
 
-instance (AlonzoEraScript era, Ledger.Script era ~ Ledger.AlonzoScript era) => Arbitrary (Ledger.PlutusScript era) where
+instance (AlonzoEraScript era, EraPlutusContext era) => Arbitrary (Ledger.PlutusScript era) where
   arbitrary = do
-    lang <- elements [minBound .. eraMaxLanguage @era]
-    script <- Ledger.genPlutusScript lang
-    case script of
-      Ledger.TimelockScript{} -> error "impossible"
-      Ledger.PlutusScript s -> pure s
+    lang <- elements (toList (supportedLanguages @era))
+    Ledger.genPlutusScript lang

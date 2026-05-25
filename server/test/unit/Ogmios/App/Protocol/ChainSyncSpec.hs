@@ -22,7 +22,8 @@ import Data.Aeson
     ( ToJSON (..)
     )
 import Network.TypedProtocol.Codec
-    ( Codec (..)
+    ( Codec
+    , CodecF (..)
     , SomeMessage (..)
     , runDecoder
     )
@@ -43,6 +44,9 @@ import Ogmios.Control.MonadAsync
     )
 import Ogmios.Control.MonadLog
     ( nullTracer
+    )
+import Control.Monad.Class.MonadThrow
+    ( MonadEvaluate
     )
 import Ogmios.Control.MonadOuroboros
     ( MonadOuroboros
@@ -202,7 +206,7 @@ maxInFlight :: MaxInFlight
 maxInFlight = 3
 
 withChainSyncClient
-    :: (MonadOuroboros m)
+    :: (MonadEvaluate m, MonadOuroboros m)
     => ((ChainSyncMessage Block -> m ()) ->  m Json -> m a)
     -> StdGen
     -> m a
