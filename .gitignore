@@ -5,3 +5,5 @@ docs/static/typescript/api
 ## Nix
 /result
 /result-*
+
+/.direnv
