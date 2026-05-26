@@ -34,6 +34,19 @@
           {
             doHaddock = false;
             packages.ogmios.ghcOptions = [ "-Werror" ];
+            packages.ogmios.components.tests.unit.preCheck = ''
+              cp ${self}/server/ogmios.json .
+              cp ${self}/server/cardano.json .
+
+              # Test.Path.Util.getProjectRoot uses TH `makeRelativeToProject ""`
+              # which bakes the compile-time absolute path
+              # /build/ogmios-src-test-unit-root/server into the binary. Recreate
+              # that path at runtime with the golden fixtures and the
+              # cardano-configurations submodule content.
+              mkdir -p /build/ogmios-src-test-unit-root/server/test
+              cp -r ${self}/server/test/golden /build/ogmios-src-test-unit-root/server/test/golden
+              cp -r ${self}/server/config /build/ogmios-src-test-unit-root/server/config
+            '';
           }
           ({ pkgs, ... }: {
             # Use the VRF fork of libsodium

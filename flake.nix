@@ -22,7 +22,7 @@
   outputs = inputs: let
     inherit ((import ./flake/lib.nix {inherit inputs;}).flake.lib) recursiveImports;
   in
-    inputs.flake-parts.lib.mkFlake {inherit inputs;} ({self, ...}: {
+    inputs.flake-parts.lib.mkFlake {inherit inputs;} {
       imports = recursiveImports [./perSystem];
       systems = [
         "x86_64-linux"
@@ -43,7 +43,7 @@
           ];
         };
       };
-    });
+    };
 
   nixConfig = {
     extra-substituters = [
