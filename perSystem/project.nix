@@ -34,6 +34,7 @@
           {
             doHaddock = false;
             packages.ogmios.ghcOptions = [ "-Werror" ];
+            packages.ogmios.components.tests.unit.ghcOptions = [ "-Wno-unused-imports" ];
             packages.ogmios.components.tests.unit.preCheck = ''
               cp ${self}/server/ogmios.json .
               cp ${self}/server/cardano.json .

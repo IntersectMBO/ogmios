@@ -6,7 +6,7 @@
     };
     flake-parts.url = "github:hercules-ci/flake-parts";
     hackageNix = {
-      url = "github:input-output-hk/hackage.nix?ref=dc7cfd9bd2e8d0fc662c4bbec02ad36455758912";
+      url = "github:input-output-hk/hackage.nix";
       flake = false;
     };
     haskellNix = {
