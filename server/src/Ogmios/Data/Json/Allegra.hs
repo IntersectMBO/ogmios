@@ -137,7 +137,7 @@ encodeTimelock =
         -- Timelock era (see the per-era COMPLETE pragmas in
         -- Cardano.Ledger.Allegra.Scripts).
         _ ->
-            error "encodeTimelock: impossible — Timelock has no other constructors"
+            "clause" .= encodeText "unknown"
 
 encodeTx ::
     (MetadataFormat, IncludeCbor) ->

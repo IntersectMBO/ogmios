@@ -211,12 +211,12 @@ inMultipleEras nodeToClientV id =
 -- The list is ordered from the "most probable era", down to the least
 -- probable. This hopefully ensures that we do a minimum number of loops
 -- for the happy path.
-    GenTxIdBabbage (ShelleyTxId id) :
+    GenTxIdConway (ShelleyTxId id) :
         if nodeToClientV >= NodeToClientV_16 then
-            [ GenTxIdDijkstra (ShelleyTxId id)
-            , GenTxIdConway (ShelleyTxId id)
+            [ GenTxIdBabbage (ShelleyTxId id)
             , GenTxIdAlonzo (ShelleyTxId id)
             , GenTxIdMary (ShelleyTxId id)
+            , GenTxIdDijkstra (ShelleyTxId id)
             ]
         else
             [ GenTxIdAlonzo (ShelleyTxId id)

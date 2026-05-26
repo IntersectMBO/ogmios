@@ -520,16 +520,12 @@ utxoFromMempool =
             UTxOInConwayEra (UTxO (Map.union ul ur))
         (UTxOInConwayEra (UTxO ul), UTxOInConwayEra (UTxO ur)) ->
             UTxOInConwayEra (UTxO (Map.union ul ur))
-        (UTxOInBabbageEra (upgrade -> (upgrade -> (UTxO ul))), UTxOInDijkstraEra (UTxO ur)) ->
-            UTxOInDijkstraEra (UTxO (Map.union ul ur))
-        (UTxOInConwayEra (upgrade -> (UTxO ul)), UTxOInDijkstraEra (UTxO ur)) ->
-            UTxOInDijkstraEra (UTxO (Map.union ul ur))
-        (UTxOInDijkstraEra (UTxO ul), UTxOInBabbageEra (upgrade -> (upgrade -> (UTxO ur)))) ->
-            UTxOInDijkstraEra (UTxO (Map.union ul ur))
-        (UTxOInDijkstraEra (UTxO ul), UTxOInConwayEra (upgrade -> (UTxO ur))) ->
-            UTxOInDijkstraEra (UTxO (Map.union ul ur))
         (UTxOInDijkstraEra (UTxO ul), UTxOInDijkstraEra (UTxO ur)) ->
             UTxOInDijkstraEra (UTxO (Map.union ul ur))
+        (_, UTxOInDijkstraEra (UTxO ur)) ->
+            UTxOInDijkstraEra (UTxO ur)
+        (UTxOInDijkstraEra (UTxO ul), _) ->
+            UTxOInDijkstraEra (UTxO ul)
 
     newUtxoFor :: TxId -> [out] -> Map TxIn out
     newUtxoFor h outs =
@@ -595,16 +591,12 @@ mergeUtxo a b = case (a, b) of
         UTxOInConwayEra $ UTxO (Map.union l (upgrade <$> r))
     (UTxOInConwayEra (unUTxO -> l), UTxOInConwayEra (unUTxO -> r)) ->
         UTxOInConwayEra $ UTxO (Map.union l r)
-    (UTxOInBabbageEra (unUTxO -> l), UTxOInDijkstraEra (unUTxO -> r)) ->
-        UTxOInDijkstraEra $ UTxO (Map.union (upgrade <$> (upgrade <$> l)) r)
-    (UTxOInConwayEra (unUTxO -> l), UTxOInDijkstraEra (unUTxO -> r)) ->
-        UTxOInDijkstraEra $ UTxO (Map.union (upgrade <$> l) r)
-    (UTxOInDijkstraEra (unUTxO -> l), UTxOInBabbageEra (unUTxO -> r)) ->
-        UTxOInDijkstraEra $ UTxO (Map.union l (upgrade <$> (upgrade <$> r)))
-    (UTxOInDijkstraEra (unUTxO -> l), UTxOInConwayEra (unUTxO -> r)) ->
-        UTxOInDijkstraEra $ UTxO (Map.union l (upgrade <$> r))
     (UTxOInDijkstraEra (unUTxO -> l), UTxOInDijkstraEra (unUTxO -> r)) ->
         UTxOInDijkstraEra $ UTxO (Map.union l r)
+    (_, UTxOInDijkstraEra (unUTxO -> r)) ->
+        UTxOInDijkstraEra $ UTxO r
+    (UTxOInDijkstraEra (unUTxO -> l), _) ->
+        UTxOInDijkstraEra $ UTxO l
 
 utxoReferences :: MultiEraUTxO (CardanoBlock crypto) -> [Text]
 utxoReferences =

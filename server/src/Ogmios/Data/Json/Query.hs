@@ -1035,45 +1035,44 @@ parseQueryLedgerDelegateRepresentatives genResult =
             SomeShelleyEra ShelleyBasedEraBabbage ->
                 Nothing
             SomeShelleyEra ShelleyBasedEraConway ->
-                Just
-                    $ SomeCompoundQuery
-                        -- Re-enable as soon as NodeToClientV_23 becomes available
-                        -- in a released cardano-node.
-                        --
-                        -- (LSQ.BlockQuery
-                        --     (QueryIfCurrentConway
-                        --         (GetDRepDelegations dreps)
-                        --     )
-                        -- )
-                        ( LSQ.BlockQuery
-                            ( QueryIfCurrentConway
-                                (GetDRepState credentials)
-                            )
-                        )
-                        ( \_ ->
-                            LSQ.BlockQuery
-                                ( QueryIfCurrentConway
-                                    (GetDRepStakeDistr dreps)
-                                )
-                        )
-                        (\st distr -> let delegs = Map.empty in mergeAll delegs (Map.mapKeys Ledger.credToDRep st) distr)
-                        (eraMismatchOrResult (encodeMapAsList encodeDRepSummary . withDefaultProtocolDreps))
-                        genResult
+                Just $ SomeCompound2Query
+                  (LSQ.BlockQuery
+                      (QueryIfCurrentConway
+                          (GetDRepDelegations dreps)
+                      )
+                  )
+                  (const $ LSQ.BlockQuery
+                      ( QueryIfCurrentConway
+                          (GetDRepState credentials)
+                      )
+                  )
+                  ( \_ _ ->
+                      LSQ.BlockQuery
+                          ( QueryIfCurrentConway
+                              (GetDRepStakeDistr dreps)
+                          )
+                  )
+                  (\delegs st distr -> mergeAll delegs (Map.mapKeys Ledger.credToDRep st) distr)
+                  (eraMismatchOrResult (encodeMapAsList encodeDRepSummary . withDefaultProtocolDreps))
+                  genResult
             SomeShelleyEra ShelleyBasedEraDijkstra ->
-                Just
-                    $ SomeCompoundQuery
-                        ( LSQ.BlockQuery
-                            ( QueryIfCurrentDijkstra
-                                (GetDRepState credentials)
-                            )
+                Just $ SomeCompound2Query
+                    (LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetDRepDelegations dreps)
                         )
-                        ( \_ ->
-                            LSQ.BlockQuery
-                                ( QueryIfCurrentDijkstra
-                                    (GetDRepStakeDistr dreps)
-                                )
+                    )
+                    (\_ -> LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetDRepState credentials)
                         )
-                        (\st distr -> let delegs = Map.empty in mergeAll delegs (Map.mapKeys Ledger.credToDRep st) distr)
+                    )
+                    (\_ _ -> LSQ.BlockQuery
+                        (QueryIfCurrentDijkstra
+                            (GetDRepStakeDistr dreps)
+                        )
+                    )
+                    (\delegs st distr -> mergeAll delegs (Map.mapKeys Ledger.credToDRep st) distr)
                         (eraMismatchOrResult (encodeMapAsList encodeDRepSummary . withDefaultProtocolDreps))
                         genResult
   where
