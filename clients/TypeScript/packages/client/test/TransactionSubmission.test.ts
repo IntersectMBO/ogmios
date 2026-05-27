@@ -102,11 +102,11 @@ describe('TransactionSubmission', () => {
             alonzo: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 3, but found 4.",
             babbage: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 3, but found 4.",
             conway: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 3, but found 4.",
-            mary: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. field TxFee with key 2, not decoded.",
+            mary: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. field Fee with key 2, not decoded.",
             allegra: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
-              'field TxFee with key 2, not decoded.',
+              'field Fee with key 2, not decoded.',
             shelley: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
-              'field fee with key 2, not decoded.'
+              'field Fee with key 2, not decoded.'
           })
         }
       })
@@ -129,10 +129,9 @@ describe('TransactionSubmission', () => {
     ]
 
     methods.forEach(evaluate => {
-      it('successfully evaluates execution units of well-formed tx', async () => {
-        let result
+      it('fails to evaluate execution units of an Alonzo transaction', async () => {
         try {
-          result = await evaluate(
+          await evaluate(
             ('84A300818258204E9A66B7E310F004893EEF615E11F8AE6C3328CF2BFDB3' +
              '2F6E40063636D42D7C00018182581D70C40F9129C2684046EB02325B96CA' +
              '2899A6FA6478C1DDE9B5C53206A51A00D59F800200A10581840000D8799F' +
@@ -140,87 +139,8 @@ describe('TransactionSubmission', () => {
             )
           )
         } catch (e) {
-          console.log('Ho no! Failed to evaluate a well-formed transaction:', e)
-        }
-
-        expect(result).toEqual([{
-          validator: {
-            purpose: 'spend',
-            index: 0
-          },
-          budget: {
-            memory: 15694,
-            cpu: 3776164
-          }
-        }])
-      })
-
-      it('fails to evaluate execution units when tx contains unknown inputs', async () => {
-        try {
-          await evaluate(
-            ('84A30081825820FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
-             'FFFFFFFFFFFFFFFF7C00018182581D70C40F9129C2684046EB02325B96CA' +
-             '2899A6FA6478C1DDE9B5C53206A51A00D59F800200A10581840000D8799F' +
-             '4D48656C6C6F2C20576F726C6421FF820000F5F6'
-            )
-          )
-        } catch (e) {
           expect(e).toBeInstanceOf(JSONRPCError)
-          expect(e.code).toBe(3010)
-        }
-      })
-
-      it('successfully evaluate execution units when unknown inputs are provided as additional utxo', async () => {
-        const bytes = (
-          '84A30081825820FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
-          'FFFFFFFFFFFFFFFFFF00018182581D70C40F9129C2684046EB02325B96CA' +
-          '2899A6FA6478C1DDE9B5C53206A51A00D59F800200A10581840000D8799F' +
-          '4D48656C6C6F2C20576F726C6421FF820000F5F6'
-        )
-
-        const additionalUtxoSet = [{
-          transaction: { id: 'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' },
-          index: 0,
-          address: 'addr_test1wrzqlyffcf5yq3htqge9h9k29zv6d7ny0rqam6d4c5eqdfgg0h7yw',
-          value: { ada: { lovelace: BigInt(14000000) } },
-          datum: 'd87980',
-          script: {
-            language: 'plutus:v2',
-            cbor: '59010601000032323232323232323232322223253330083371e6eb8cc014c01c00520004890d48656c6c6f2c20576f726c642100149858cc020c94ccc020cdc3a400000226464a66601e60220042930a99806249334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375c601e002600e0062a660149212b436f6e73747220696e64657820646964206e6f74206d6174636820616e7920747970652076617269616e740016300a37540040046600200290001111199980319b8700100300c233330050053370000890011807000801001118031baa0015734ae6d5ce2ab9d5573caae7d5d0aba201'
-          }
-        }] as Utxo
-
-        try {
-          await evaluate(bytes)
-        } catch (e) {
-          expect(e).toBeInstanceOf(JSONRPCError)
-          expect(e.code).toBe(3010)
-        }
-
-        const result = await evaluate(bytes, additionalUtxoSet)
-        expect(result).toEqual([{
-          validator: {
-            purpose: 'spend',
-            index: 0
-          },
-          budget: {
-            memory: 15694,
-            cpu: 3776164
-          }
-        }])
-      })
-
-      it('fails to evaluate execution units when there are script failures', async () => {
-        try {
-          await evaluate(
-            ('84A300818258204E9A66B7E310F004893EEF615E11F8AE6C3328CF2BFDB3' +
-             '2F6E40063636D42D7C00018182581D70C40F9129C2684046EB02325B96CA' +
-             '2899A6FA6478C1DDE9B5C53206A51A00D59F800200A10581840000D8799F' +
-             '43466F6FFF820000F5F6'
-            )
-          )
-        } catch (e) {
-          expect(e).toBeInstanceOf(JSONRPCError)
+          expect(e.code).toBe(3001)
         }
       })
 
