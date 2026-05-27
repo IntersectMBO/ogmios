@@ -14,7 +14,7 @@ on:
 
 env:
   CARDANO_NODE_VERSION: "11.0.1"
-  S3_DB_PATH: s3://${{ secrets.AWS_S3_BUCKET }}/db-preview/
+  S3_DB_PATH: s3://${{ secrets.AWS_S3_BUCKET }}/db-preview
 
 jobs:
   sync_and_cache:
@@ -38,6 +38,13 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
+    - name: Install Nix
+      uses: cachix/install-nix-action@b97f05dcb019ddea06450a50ef6203d2fdc19fee # v31
+      with:
+        extra_nix_config: |
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+          substituters = https://cache.iog.io/ https://cache.nixos.org/
+
     - name: Restore cardano-node DB from S3
       shell: bash {0}
       env:
@@ -46,18 +53,21 @@ jobs:
         mkdir -p "$RUNNER_TEMP/db-preview"
         for attempt in 1 2 3; do
           echo "S3 sync attempt $attempt..."
-          aws s3 sync --quiet "$S3_DB_PATH" "$RUNNER_TEMP/db-preview" > /tmp/s3-sync.log 2>&1 &
+          nix shell nixpkgs#s5cmd -c \
+            s5cmd --log error sync "$S3_DB_PATH/*" "$RUNNER_TEMP/db-preview/" > /tmp/s3-sync.log 2>&1 &
           pid=$!
           while kill -0 "$pid" 2>/dev/null; do
             du -sh "$RUNNER_TEMP/db-preview" 2>/dev/null
             sleep 15
           done
-          if wait "$pid"; then
+          wait "$pid"
+          rc=$?
+          echo "S3 sync attempt $attempt finished (exit $rc). Last 30 lines of log:"
+          tail -30 /tmp/s3-sync.log
+          if [ "$rc" -eq 0 ]; then
             echo "S3 sync succeeded"
             break
           fi
-          echo "S3 sync attempt $attempt failed. Last 30 lines of log:"
-          tail -30 /tmp/s3-sync.log
           if [ "$attempt" -eq 3 ]; then
             exit 1
           fi
@@ -105,4 +115,6 @@ jobs:
       if: always() && steps.sync.outcome != 'skipped'
       env:
         RUNNER_TEMP: ${{ runner.temp }}
-      run: aws s3 sync --quiet "$RUNNER_TEMP/db-preview" "$S3_DB_PATH"
+      run: |
+        nix shell nixpkgs#s5cmd -c \
+          s5cmd --log error sync "$RUNNER_TEMP/db-preview/" "$S3_DB_PATH/"
