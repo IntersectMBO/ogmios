@@ -39,6 +39,7 @@ jobs:
         aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Restore cardano-node DB from S3
+      shell: bash {0}
       env:
         RUNNER_TEMP: ${{ runner.temp }}
       run: |
