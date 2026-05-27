@@ -1,650 +1,168 @@
+---
 name: Continuous Integration
 
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ "master" ]
+    branches:
+    - master
   push:
-    branches: [ "master", "v*.*" ]
-    tags: [ "*.*.*" ]
+    branches:
+    - master
+
+env:
+  CARDANO_NODE_VERSION: "11.0.1"
+  NETWORK: preview
+  S3_DB_PATH: s3://${{ secrets.AWS_S3_BUCKET }}/db-preview/
 
 jobs:
+  # TODO: switch back to this once Hydra reports check-runs to GitHub
+  # wait-for-hydra:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: Wait for Hydra build
+  #     env:
+  #       GH_TOKEN: ${{ github.token }}
+  #     run: |
+  #       check_name="ci/hydra-build:required"
+  #       while true; do
+  #         conclusion=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=$check_name" \
+  #           --paginate --jq '.check_runs[].conclusion')
+  #         case "$conclusion" in
+  #           success) echo "Hydra build succeeded"; exit 0 ;;
+  #           "") echo "Hydra build pending, waiting 30s..."; sleep 30 ;;
+  #           *) echo "Hydra build failed with: $conclusion"; exit 1 ;;
+  #         esac
+  #       done
 
-  #   █████████                                                       ███████████              ███  ████      █████
-  #  ███░░░░░███                                                     ░░███░░░░░███            ░░░  ░░███     ░░███
-  # ░███    ░░░   ██████  ████████  █████ █████  ██████  ████████     ░███    ░███ █████ ████ ████  ░███   ███████
-  # ░░█████████  ███░░███░░███░░███░░███ ░░███  ███░░███░░███░░███    ░██████████ ░░███ ░███ ░░███  ░███  ███░░███
-  #  ░░░░░░░░███░███████  ░███ ░░░  ░███  ░███ ░███████  ░███ ░░░     ░███░░░░░███ ░███ ░███  ░███  ░███ ░███ ░███
-  #  ███    ░███░███░░░   ░███      ░░███ ███  ░███░░░   ░███         ░███    ░███ ░███ ░███  ░███  ░███ ░███ ░███
-  # ░░█████████ ░░██████  █████      ░░█████   ░░██████  █████        ███████████  ░░████████ █████ █████░░████████
-  #  ░░░░░░░░░   ░░░░░░  ░░░░░        ░░░░░     ░░░░░░  ░░░░░        ░░░░░░░░░░░    ░░░░░░░░ ░░░░░ ░░░░░  ░░░░░░░░
-
-  server_build:
-    strategy:
-      matrix:
-        os: [ linux ]
-        arch: [ x86_64, aarch64 ]
-        compiler: [ ghc96 ]
-        devx-version: [ 887b833d89db35168fbd4f10afb6f93d26d70f9a ]
-
-    runs-on: ${{ matrix.os == 'linux' && matrix.arch == 'aarch64' && 'buildjet-16vcpu-ubuntu-2204-arm' || 'ubuntu-22.04' }}
-
+  clients_TypeScript:
+    # needs:
+    # - wait-for-hydra
+    runs-on: ubuntu-24.04
     steps:
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: true
+        persist-credentials: false
 
-    - name: 📝 Version
-      id: version
-      shell: bash
-      working-directory: server
-      run: |
-        VERSION=$(cat package.yaml | grep "version:" | sed "s/[^0-9]*\([0-9]\)\(.[0-9].[0-9]\)*/\1\2/")
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-    - name: Install Nix with good defaults
-      uses: cachix/install-nix-action@v22
+    - name: Install Nix
+      uses: cachix/install-nix-action@b97f05dcb019ddea06450a50ef6203d2fdc19fee # v31
       with:
         extra_nix_config: |
           trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
           substituters = https://cache.iog.io/ https://cache.nixos.org/
-        nix_path: nixpkgs=channel:nixos-unstable
 
-    - uses: cachix/cachix-action@v14
-      with:
-        name: cardano-ogmios
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-
-    - name: ❄️ Prepare cache (x86_64)
-      if: ${{ matrix.arch == 'x86_64' }}
-      working-directory: server
+    # Temporary: poll the Nix cache directly until Hydra check-run reporting is fixed
+    - name: Wait for ogmios-exe in Hydra cache
       run: |
-        nix develop github:input-output-hk/devx/${{ matrix.devx-version}}#${{ matrix.compiler }}-static-minimal-iog --no-write-lock-file --refresh --command bash -c "cat /nix/store/vd865r55pdbndjwh994h90m35qq77x44-cabal.project.local >> cabal.project.local && cabal update && cabal freeze"
-
-    - name: ❄️ Prepare cache (aarch64)
-      if: ${{ matrix.arch == 'aarch64' }}
-      working-directory: server
-      run: |
-        nix develop github:input-output-hk/devx/${{ matrix.devx-version}}#${{ matrix.compiler }}-static-minimal-iog --no-write-lock-file --refresh --command bash -c "cat /nix/store/hviyb5sciblcyr5fc3vsqcwmfh1nz69w-cabal.project.local >> cabal.project.local && cabal update && cabal freeze"
-
-    - name: 💾 Download Cache
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          ~/.cabal-static/packages
-          ~/.cabal-static/store
-          server/dist-newstyle
-        key: cabal-cache-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.compiler }}-${{ hashFiles('server/cabal.project.freeze') }}
-        restore-keys: |
-          cabal-cache-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.compiler }}
-
-    - name: 🔨  Dependencies
-      working-directory: server
-      run: |
-        nix develop github:input-output-hk/devx/${{ matrix.devx-version }}#${{ matrix.compiler }}-static-minimal-iog --no-write-lock-file --refresh --command bash -c "cabal build --enable-executable-static --only-dependencies ogmios:lib:ogmios"
-      env:
-        GIT_SHA: ${{ github.sha }}
-
-    - name: 💾 Save Cache
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          ~/.cabal-static/packages
-          ~/.cabal-static/store
-          server/dist-newstyle
-        key: cabal-cache-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.compiler }}-${{ hashFiles('server/cabal.project.freeze') }}
-
-    - name: 🔨 Build
-      working-directory: server
-      run: |
-        nix develop github:input-output-hk/devx/${{ matrix.devx-version }}#${{ matrix.compiler }}-static-minimal-iog --no-write-lock-file --refresh --command bash -c "cabal build --enable-executable-static ogmios:exe:ogmios"
-      env:
-        GIT_SHA: ${{ github.sha }}
-
-    - name: 📦 Package
-      run: |
-        mkdir -p bin
-        cp ./server/dist-newstyle/build/${{ matrix.arch }}-${{ matrix.os }}/ghc-${{ matrix.compiler == 'ghc96' && '9.6.5' }}/ogmios-${{ steps.version.outputs.version }}/x/ogmios/build/ogmios/ogmios ./bin/ogmios
-        mkdir -p share && chmod +w share
-        mkdir -p share/zsh/site-functions
-        ./bin/ogmios --zsh-completion-script ogmios > ./share/zsh/site-functions/_ogmios
-        mkdir -p share/bash-completion/completions
-        ./bin/ogmios --bash-completion-script ogmios > ./share/bash-completion/completions/ogmios
-        chmod -w share
-
-    - name: 🔬 Version Sanity Check
-      if: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags') }}
-      id: version-check
-      shell: bash
-      run: |
-        OUTPUT=$(./bin/ogmios --version)
-
-        if [[ $CABAL == "0" ]]; then
-          VERSION="nightly"
-        else
-          VERSION="v$CABAL"
-        fi
-
-        if [[ $GITHUB_REF == "refs/tags"* ]]; then
-          TAG=$(echo ${GITHUB_REF/refs\/tags\/} | sed "s/^.*\(v[0-9].[0-9].[0-9]\).*$/\1/")
-        else
-          TAG="nightly"
-        fi
-
-        echo "git:    $TAG <-- ${GITHUB_REF/refs\/tags\/}"
-        echo "cabal:  $VERSION <-- $CABAL"
-        echo "bin:    $OUTPUT"
-        echo ""
-
-        if [[ $OUTPUT == $TAG* ]] && [[ $OUTPUT == $VERSION* ]]; then
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Ok."
-          exit 0
-        else
-          echo "x inconsistent versions"
-          exit 1
-        fi
-      env:
-        CABAL: ${{ steps.version.outputs.version }}
-
-    - name: 📎 Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ogmios-${{ github.sha }}-${{ matrix.arch }}-${{ matrix.os }}
-        path: |
-          bin
-          share
-
-  #   █████████                                                       █████        ███              █████
-  #  ███░░░░░███                                                     ░░███        ░░░              ░░███
-  # ░███    ░░░   ██████  ████████  █████ █████  ██████  ████████     ░███        ████  ████████   ███████
-  # ░░█████████  ███░░███░░███░░███░░███ ░░███  ███░░███░░███░░███    ░███       ░░███ ░░███░░███ ░░░███░
-  #  ░░░░░░░░███░███████  ░███ ░░░  ░███  ░███ ░███████  ░███ ░░░     ░███        ░███  ░███ ░███   ░███
-  #  ███    ░███░███░░░   ░███      ░░███ ███  ░███░░░   ░███         ░███      █ ░███  ░███ ░███   ░███ ███
-  # ░░█████████ ░░██████  █████      ░░█████   ░░██████  █████        ███████████ █████ ████ █████  ░░█████
-  #  ░░░░░░░░░   ░░░░░░  ░░░░░        ░░░░░     ░░░░░░  ░░░░░        ░░░░░░░░░░░ ░░░░░ ░░░░ ░░░░░    ░░░░░
-
-  server_lint:
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]
-    runs-on: ${{ matrix.os }}
-    steps:
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3.5.3
-      with:
-        submodules: true
-
-    - name: 🔬 hlint
-      working-directory: server
-      shell: bash
-      env:
-        PACKAGE: hlint
-        REPOSITORY: ndmitchell/hlint
-        PLATFORM: x86_64-linux
-        RELEASE: v3.6.1
-        VERSION: 3.6.1
-      run: |
-        curl -sSL https://raw.github.com/cardanosolutions/ogmios/master/scripts/exec-from-github.sh | sh -s src test app -h .hlint.yaml
-
-    - name: 🧐 stylish-haskell
-      working-directory: server
-      shell: bash
-      env:
-        PACKAGE: stylish-haskell
-        REPOSITORY: jaspervdj/stylish-haskell
-        PLATFORM: linux-x86_64
-        RELEASE: v0.14.5.0
-        VERSION: v0.14.5.0
-      run: |
-        curl -sSL https://raw.github.com/cardanosolutions/ogmios/master/scripts/exec-from-github.sh | sh -s $(find src test app -type f -name '*.hs' ! -path '*.stack-work*') -i -c .stylish-haskell.yaml
-        if [ -z "$(git status --porcelain)" ]; then
-            echo "No style errors detected."
-        else
-            echo "Style errors detected:"
-            git diff
+        out=$(nix eval --raw "git+https://github.com/$GITHUB_REPOSITORY?rev=$GITHUB_SHA&submodules=1#ogmios-exe")
+        echo "Waiting for $out in cache..."
+        deadline=$((SECONDS + 1800))
+        while true; do
+          if nix path-info --store https://cache.iog.io "$out" >/dev/null 2>&1; then
+            echo "Found in cache"
+            break
+          fi
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "Timed out after 30 minutes waiting for Hydra cache"
             exit 1
-        fi
+          fi
+          echo "Not in cache yet, waiting 30s..."
+          sleep 30
+        done
 
-  #
-  #  ███████████                                █████████                      ███             █████         █████████  ████   ███                       █████
-  # ░█░░░███░░░█                               ███░░░░░███                    ░░░             ░░███         ███░░░░░███░░███  ░░░                       ░░███
-  # ░   ░███  ░  █████ ████ ████████   ██████ ░███    ░░░   ██████  ████████  ████  ████████  ███████      ███     ░░░  ░███  ████   ██████  ████████   ███████
-  #     ░███    ░░███ ░███ ░░███░░███ ███░░███░░█████████  ███░░███░░███░░███░░███ ░░███░░███░░░███░      ░███          ░███ ░░███  ███░░███░░███░░███ ░░░███░
-  #     ░███     ░███ ░███  ░███ ░███░███████  ░░░░░░░░███░███ ░░░  ░███ ░░░  ░███  ░███ ░███  ░███       ░███          ░███  ░███ ░███████  ░███ ░███   ░███
-  #     ░███     ░███ ░███  ░███ ░███░███░░░   ███    ░███░███  ███ ░███      ░███  ░███ ░███  ░███ ███   ░░███     ███ ░███  ░███ ░███░░░   ░███ ░███   ░███ ███
-  #     █████    ░░███████  ░███████ ░░██████ ░░█████████ ░░██████  █████     █████ ░███████   ░░█████     ░░█████████  █████ █████░░██████  ████ █████  ░░█████
-  #    ░░░░░      ░░░░░███  ░███░░░   ░░░░░░   ░░░░░░░░░   ░░░░░░  ░░░░░     ░░░░░  ░███░░░     ░░░░░       ░░░░░░░░░  ░░░░░ ░░░░░  ░░░░░░  ░░░░ ░░░░░    ░░░░░
-  #               ███ ░███  ░███                                                    ░███
-  #              ░░██████   █████                                                   █████
-  #               ░░░░░░   ░░░░░                                                   ░░░░░
-
-  clients_TypeScript:
-    needs: [server_build]
-    strategy:
-      matrix:
-        os: [ linux ]
-        arch: [ x86_64 ]
-        network: [ preview ]
-        cardano-node: [ 10.5.1 ]
-
-    runs-on: ${{ matrix.os == 'linux' && 'ubuntu-22.04' }}
-    steps:
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3
-      with:
-        submodules: true
-
-    - name: ⌚ Get Date/Time
-      id: date-time
-      shell: bash
+    - name: Download ogmios binary from Hydra cache
       run: |
-        echo "::set-output name=value::$(/bin/date -u "+%Y%m%d-%H%M%S")"
+        nix build .#ogmios-exe --builders "" --max-jobs 0
+        mkdir -p server/bin
+        cp result/bin/ogmios server/bin/ogmios
+        chmod +x server/bin/ogmios
 
-    - name: 🧰 Setup Node.js
-      uses: actions/setup-node@v3.7.0
+    - name: Download cardano-node configs
+      env:
+        BASE_URL: https://raw.githubusercontent.com/input-output-hk/cardano-playground/refs/tags/node-${{ env.CARDANO_NODE_VERSION }}-config/docs/environments/preview
+      run: |
+        mkdir -p config/preview
+        cd config/preview
+        for f in config.json topology.json peer-snapshot.json checkpoints.json \
+                 byron-genesis.json shelley-genesis.json alonzo-genesis.json conway-genesis.json; do
+          curl -sfLO "$BASE_URL/$f"
+        done
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Restore cardano-node DB from S3
+      env:
+        RUNNER_TEMP: ${{ runner.temp }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/db-preview"
+        for attempt in 1 2 3; do
+          echo "S3 sync attempt $attempt..."
+          aws s3 sync --quiet "$S3_DB_PATH" "$RUNNER_TEMP/db-preview" > /tmp/s3-sync.log 2>&1 &
+          pid=$!
+          while kill -0 "$pid" 2>/dev/null; do
+            du -sh "$RUNNER_TEMP/db-preview" 2>/dev/null
+            sleep 15
+          done
+          if wait "$pid"; then
+            echo "S3 sync succeeded"
+            break
+          fi
+          echo "S3 sync attempt $attempt failed. Last 30 lines of log:"
+          tail -30 /tmp/s3-sync.log
+          if [ "$attempt" -eq 3 ]; then
+            exit 1
+          fi
+          echo "Retrying..."
+        done
+
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
         node-version: lts/jod
 
-    - name: 🔨 Build
+    - name: Build TypeScript client
       working-directory: clients/TypeScript
       run: |
         yarn install --frozen-lockfile --non-interactive --logevel=error
         yarn build
         yarn lint
 
-    - name: 📥 Download
-      uses: actions/download-artifact@v4
-      with:
-        name: ogmios-${{ github.sha }}-${{ matrix.arch }}-${{ matrix.os }}
-        path: server
-
-    - name: 💾 Cache cardano-node DB
-      id: cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ runner.temp }}/db-${{ matrix.network }}
-        key: cardano-node-ogmios-${{ matrix.network }}-${{ steps.date-time.outputs.value }}
-        restore-keys: |
-          cardano-node-ogmios-${{ matrix.network }}-
-
-    - name: 🔬 Test
-      if: ${{ matrix.network == 'preview' }}
+    - name: Start cardano-node and wait for sync
+      id: sync
       working-directory: clients/TypeScript
-      shell: bash
       env:
-        CONFDIR: /home/runner/work/ogmios/ogmios/server/config/network/${{ matrix.network }}
+        CONFDIR: ${{ github.workspace }}/config/preview
+        RUNNER_TEMP: ${{ runner.temp }}
       run: |
-        chmod +x ../../server/bin/ogmios
-        sudo ../../server/bin/ogmios --port 1337 --log-level error --node-socket ${{ runner.temp }}/ipc/node.socket --node-config $CONFDIR/cardano-node/config.json &
+        sudo ../../server/bin/ogmios --port 1337 --log-level error --node-socket "$RUNNER_TEMP/ipc/node.socket" --node-config "$CONFDIR/config.json" &
 
-        docker pull ghcr.io/intersectmbo/cardano-node:${{ matrix.cardano-node }}
         docker run -d --name cardano-node \
-          -v ${{ runner.temp }}/db-${{ matrix.network }}:/db \
-          -v ${{ runner.temp }}/ipc:/ipc \
-          -v $CONFDIR/cardano-node:/config \
-          -v $CONFDIR/genesis:/genesis \
-          ghcr.io/intersectmbo/cardano-node:${{ matrix.cardano-node }} run --config /config/config.json --database-path /db --socket-path /ipc/node.socket --topology /config/topology.json
+          -v "$RUNNER_TEMP/db-preview:/db" \
+          -v "$RUNNER_TEMP/ipc:/ipc" \
+          -v "$CONFDIR:/config" \
+          "ghcr.io/intersectmbo/cardano-node:$CARDANO_NODE_VERSION" run --config /config/config.json --database-path /db --socket-path /ipc/node.socket --topology /config/topology.json
 
         ../../scripts/wait-for-sync.sh 1337 1 "docker logs --since 10s cardano-node"
 
-        yarn test
-        docker stop cardano-node
-        docker rm cardano-node
-
-  #
-  #  ███████████                                █████████                      ███             █████       ███████████   ██████████ ███████████  █████
-  # ░█░░░███░░░█                               ███░░░░░███                    ░░░             ░░███       ░░███░░░░░███ ░░███░░░░░█░░███░░░░░███░░███
-  # ░   ░███  ░  █████ ████ ████████   ██████ ░███    ░░░   ██████  ████████  ████  ████████  ███████      ░███    ░███  ░███  █ ░  ░███    ░███ ░███
-  #     ░███    ░░███ ░███ ░░███░░███ ███░░███░░█████████  ███░░███░░███░░███░░███ ░░███░░███░░░███░       ░██████████   ░██████    ░██████████  ░███
-  #     ░███     ░███ ░███  ░███ ░███░███████  ░░░░░░░░███░███ ░░░  ░███ ░░░  ░███  ░███ ░███  ░███        ░███░░░░░███  ░███░░█    ░███░░░░░░   ░███
-  #     ░███     ░███ ░███  ░███ ░███░███░░░   ███    ░███░███  ███ ░███      ░███  ░███ ░███  ░███ ███    ░███    ░███  ░███ ░   █ ░███         ░███      █
-  #     █████    ░░███████  ░███████ ░░██████ ░░█████████ ░░██████  █████     █████ ░███████   ░░█████     █████   █████ ██████████ █████        ███████████
-  #    ░░░░░      ░░░░░███  ░███░░░   ░░░░░░   ░░░░░░░░░   ░░░░░░  ░░░░░     ░░░░░  ░███░░░     ░░░░░     ░░░░░   ░░░░░ ░░░░░░░░░░ ░░░░░        ░░░░░░░░░░░
-  #               ███ ░███  ░███                                                    ░███
-  #              ░░██████   █████                                                   █████
-  #               ░░░░░░   ░░░░░                                                   ░░░░░
-
-  clients_TypeScript_repl:
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ${{ matrix.os }}
-    needs: [clients_TypeScript]
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]
-        target: [linux,macos,win.exe]
-    steps:
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3.5.3
-
-    - name: 🧰 Setup Node.js
-      uses: actions/setup-node@v3.7.0
-      with:
-        node-version: lts/jod
-
-    - name: 📦 Package REPL
+    - name: Run integration tests
       working-directory: clients/TypeScript
+      run: yarn test
+
+    - name: Stop cardano-node
+      if: always() && steps.sync.outcome != 'skipped'
       run: |
-        yarn install --frozen-lockfile --non-interactive --logevel=error
-        yarn repl:pkg
+        docker stop cardano-node || true
+        docker rm cardano-node || true
 
-    - name: 📎 Upload REPL exe
-      uses: actions/upload-artifact@v4
-      with:
-        name: cardano-ogmios-repl-${{ matrix.target }}-${{ github.sha }}
-        path: clients/TypeScript/packages/repl/build/cardano-ogmios-repl-${{ matrix.target }}
-
-  #  ███████████                                █████████                      ███             █████       ██████   █████ ███████████  ██████   ██████
-  # ░█░░░███░░░█                               ███░░░░░███                    ░░░             ░░███       ░░██████ ░░███ ░░███░░░░░███░░██████ ██████
-  # ░   ░███  ░  █████ ████ ████████   ██████ ░███    ░░░   ██████  ████████  ████  ████████  ███████      ░███░███ ░███  ░███    ░███ ░███░█████░███
-  #     ░███    ░░███ ░███ ░░███░░███ ███░░███░░█████████  ███░░███░░███░░███░░███ ░░███░░███░░░███░       ░███░░███░███  ░██████████  ░███░░███ ░███
-  #     ░███     ░███ ░███  ░███ ░███░███████  ░░░░░░░░███░███ ░░░  ░███ ░░░  ░███  ░███ ░███  ░███        ░███ ░░██████  ░███░░░░░░   ░███ ░░░  ░███
-  #     ░███     ░███ ░███  ░███ ░███░███░░░   ███    ░███░███  ███ ░███      ░███  ░███ ░███  ░███ ███    ░███  ░░█████  ░███         ░███      ░███
-  #     █████    ░░███████  ░███████ ░░██████ ░░█████████ ░░██████  █████     █████ ░███████   ░░█████     █████  ░░█████ █████        █████     █████
-  #    ░░░░░      ░░░░░███  ░███░░░   ░░░░░░   ░░░░░░░░░   ░░░░░░  ░░░░░     ░░░░░  ░███░░░     ░░░░░     ░░░░░    ░░░░░ ░░░░░        ░░░░░     ░░░░░
-  #               ███ ░███  ░███                                                    ░███
-  #              ░░██████   █████                                                   █████
-  #               ░░░░░░   ░░░░░                                                   ░░░░░
-
-  clients_TypeScript_npm:
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ${{ matrix.os }}
-    needs: [clients_TypeScript]
-    strategy:
-      matrix:
-        os: [ ubuntu-22.04 ]
-        package: [ schema, client, repl ]
-    steps:
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3.5.3
-
-    - name: 🧰 Setup Node.js
-      uses: actions/setup-node@v3.7.0
-      with:
-        node-version: lts/jod
-
-    - name: 📦 Pack
-      working-directory: clients/TypeScript
-      run: |
-        yarn install --frozen-lockfile --non-interactive --logevel=error
-        ./scripts/pack.sh
-
-    - name: 📎 Upload npm packages
-      uses: actions/upload-artifact@v4
-      with:
-        name: cardano-ogmios-clients-ts-packages
-        path: |
-          clients/TypeScript/cardano-ogmios-client-${{ github.sha }}.tgz
-          clients/TypeScript/cardano-ogmios-schema-${{ github.sha }}.tgz
-          clients/TypeScript/cardano-ogmios-repl-${{ github.sha }}.tgz
-
-    - name: 📤 Publish client package to npm registry
-      if: ${{ startsWith(github.ref, 'refs/tags') }}
-      uses: JS-DevTools/npm-publish@v2
-      with:
-        package: clients/TypeScript/packages/${{ matrix.package }}/package.json
-        strategy: upgrade
-        token: ${{ secrets.NPM_TOKEN }}
-
-  #  ██████████      ███████      █████████  █████   ████ ██████████ ███████████
-  # ░░███░░░░███   ███░░░░░███   ███░░░░░███░░███   ███░ ░░███░░░░░█░░███░░░░░███
-  #  ░███   ░░███ ███     ░░███ ███     ░░░  ░███  ███    ░███  █ ░  ░███    ░███
-  #  ░███    ░███░███      ░███░███          ░███████     ░██████    ░██████████
-  #  ░███    ░███░███      ░███░███          ░███░░███    ░███░░█    ░███░░░░░███
-  #  ░███    ███ ░░███     ███ ░░███     ███ ░███ ░░███   ░███ ░   █ ░███    ░███
-  #  ██████████   ░░░███████░   ░░█████████  █████ ░░████ ██████████ █████   █████
-  # ░░░░░░░░░░      ░░░░░░░      ░░░░░░░░░  ░░░░░   ░░░░ ░░░░░░░░░░ ░░░░░   ░░░░░
-
-  docker_combined:
-    needs: [ server_build ]
-    runs-on: ${{ matrix.os == 'linux' && 'ubuntu-22.04' }}
-    strategy:
-      matrix:
-        os: [ linux ]
-        target: [ cardano-node-ogmios ]
-        network: [ mainnet, preprod, preview ]
-        cardano-node: [ 10.5.1 ]
-        cardano-node-latest: [  10.5.1 ]
-        arch: [ x86_64 ]
-    steps:
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3
-      with:
-        submodules: true
-
-    - name: 🧰 Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: 🧐 hadolint
-      uses: brpaz/hadolint-action@v1.5.0
-      with:
-        dockerfile: "./Dockerfile"
-        failure-threshold: warning
-        ignore: DL3029 DL3059
-
-    - name: 🐳 Login to DockerHub
-      if: ${{ github.event_name == 'push' }}
-      uses: docker/login-action@v1
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
-
-    - name: 📝 Base Variables
-      id: base-variables
-      run: |
-        echo "image=cardanosolutions/${{ matrix.target }}" >> $GITHUB_OUTPUT
-
-    - name: 📝 Tag Variables
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags') }}
-      id: tag-variables
-      run: |
-        echo "tag=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-
-    - name: 📥 Download
-      uses: actions/download-artifact@v4
-      with:
-        name: ogmios-${{ github.sha }}-${{ matrix.arch }}-${{ matrix.os }}
-        path: server
-
-    - name: "📸  :latest"
-      id: build
-      if: ${{ github.event_name == 'push' && matrix.network == 'mainnet' && github.ref == 'refs/heads/master' }}
-      uses: docker/build-push-action@v4
-      with:
-        build-args: |
-          NETWORK=${{ matrix.network }}
-          CARDANO_NODE_IMAGE=ghcr.io/intersectmbo/cardano-node:${{ matrix.cardano-node-latest }}
-        context: .
-        push: true
-        tags: ${{ steps.base-variables.outputs.image }}:latest
-        target: ${{ matrix.target }}
-        platforms: ${{ matrix.os }}/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }}
-        cache-from: type=registry,ref=${{ steps.base-variables.outputs.image }}:latest
-        cache-to: type=inline
-
-    - name: "📸  :latest-${{ matrix.network }}"
-      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-      uses: docker/build-push-action@v4
-      with:
-        build-args: |
-          NETWORK=${{ matrix.network }}
-          CARDANO_NODE_IMAGE=ghcr.io/intersectmbo/cardano-node:${{ matrix.cardano-node-latest }}
-        context: .
-        push: true
-        tags: ${{ steps.base-variables.outputs.image }}:latest-${{ matrix.network }}
-        target: ${{ matrix.target }}
-        platforms: ${{ matrix.os }}/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }}
-        cache-from: type=registry,ref=${{ steps.base-variables.outputs.image }}:latest-${{ matrix.network }}
-        cache-to: type=inline
-
-    - name: "🏷️  :v*.*.*"
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && matrix.network == 'mainnet' }}
-      uses: docker/build-push-action@v4
-      with:
-        build-args: |
-          NETWORK=${{ matrix.network }}
-          CARDANO_NODE_IMAGE=ghcr.io/intersectmbo/cardano-node:${{ matrix.cardano-node }}
-        context: .
-        push: true
-        tags: ${{ steps.base-variables.outputs.image }}:${{ steps.tag-variables.outputs.tag }}_${{ matrix.cardano-node }}
-        target: ${{ matrix.target }}
-        platforms: ${{ matrix.os }}/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }}
-        cache-from: type=registry,ref=${{ steps.base-variables.outputs.image }}:latest
-        cache-to: type=inline
-
-    - name: "🏷️  :v*.*.*-${{ matrix.network }}"
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags') }}
-      uses: docker/build-push-action@v4
-      with:
-        build-args: |
-          NETWORK=${{ matrix.network }}
-          CARDANO_NODE_IMAGE=ghcr.io/intersectmbo/cardano-node:${{ matrix.cardano-node }}
-        context: .
-        push: true
-        tags: ${{ steps.base-variables.outputs.image }}:${{ steps.tag-variables.outputs.tag }}_${{ matrix.cardano-node }}-${{ matrix.network }}
-        target: ${{ matrix.target }}
-        platforms: ${{ matrix.os }}/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }}
-        cache-from: type=registry,ref=${{ steps.base-variables.outputs.image }}:latest-${{ matrix.network }}
-        cache-to: type=inline
-
-  docker_standalone:
-    needs: [ server_build ]
-    runs-on: ${{ matrix.os == 'linux' && 'ubuntu-22.04' }}
-    strategy:
-      matrix:
-        os: [ linux ]
-        target: [ ogmios ]
-        arch: [ x86_64, aarch64 ]
-    steps:
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3
-      with:
-        submodules: true
-
-    - name: 🧰 Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: 🧐 hadolint
-      uses: brpaz/hadolint-action@v1.5.0
-      with:
-        dockerfile: "./Dockerfile"
-        failure-threshold: warning
-        ignore: DL3029 DL3059
-
-    - name: 🐳 Login to DockerHub
-      if: ${{ github.event_name == 'push' }}
-      uses: docker/login-action@v1
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
-
-    - name: 📝 Base Variables
-      id: base-variables
-      run: |
-        echo "image=cardanosolutions/${{ matrix.target }}" >> $GITHUB_OUTPUT
-
-    - name: 📝 Tag Variables
-      if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags') }}
-      id: tag-variables
-      run: |
-        echo "tag=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-
-    - name: 📝 Docker metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ steps.base-variables.outputs.image }}
-        tags: |
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=semver,pattern=v{{version}}
-
-    - name: 📥 Download
-      uses: actions/download-artifact@v4
-      with:
-        name: ogmios-${{ github.sha }}-${{ matrix.arch }}-${{ matrix.os }}
-        path: server
-
-    - name: 📸  Build image
-      id: build
-      if: ${{ github.event_name == 'push' }}
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        target: ${{ matrix.target }}
-        platforms: ${{ matrix.os }}/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }}
-        cache-from: type=registry,ref=${{ steps.base-variables.outputs.image }}:latest
-        cache-to: type=inline
-        outputs: type=image,name=${{ steps.base-variables.outputs.image }},push-by-digest=true,name-canonical=true,push=true
-
-    - name: 🔡 Export digest
-      if: ${{ github.event_name == 'push' }}
-      run: |
-        mkdir -p /tmp/digests
-        digest="${{ steps.build.outputs.digest }}"
-        touch "/tmp/digests/${digest#sha256:}"
-
-    - name: 💾  Upload digest
-      if: ${{ github.event_name == 'push' }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: digests-${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }}
-        path: /tmp/digests/*
-        if-no-files-found: error
-        retention-days: 1
-
-  registry:
-    needs: [ docker_standalone ]
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        target: [ ogmios ]
-    steps:
-      - name: 📥 Download digests (amd)
-        uses: actions/download-artifact@v4
-        with:
-          name: digests-amd64
-          path: /tmp/digests
-
-      - name: 📥 Download digests (arm)
-        uses: actions/download-artifact@v4
-        with:
-          name: digests-arm64
-          path: /tmp/digests
-
-      - name: 🧰  Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: 📝 Base Variables
-        id: base-variables
-        run: |
-          echo "image=cardanosolutions/${{ matrix.target }}" >> $GITHUB_OUTPUT
-
-      - name: 📝 Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.base-variables.outputs.image }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern=v{{version}}
-
-      - name: 🐳 Login to DockerHub
-        if: ${{ github.event_name == 'push' }}
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
-
-      - name: 📦 Create manifest list and push
-        if: ${{ github.event_name == 'push' }}
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ steps.base-variables.outputs.image }}@sha256:%s ' *)
-
-      - name: 🧐 Inspect image
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          docker buildx imagetools inspect ${{ steps.base-variables.outputs.image }}:${{ steps.meta.outputs.version }}
+    - name: Save cardano-node DB to S3
+      if: always() && steps.sync.outcome == 'success'
+      env:
+        RUNNER_TEMP: ${{ runner.temp }}
+      run: aws s3 sync --quiet "$RUNNER_TEMP/db-preview" "$S3_DB_PATH"
