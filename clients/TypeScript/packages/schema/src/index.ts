@@ -1187,7 +1187,7 @@ export interface BootstrapProtocolParameters {
 }
 export interface BootstrapVote {
   voter: {
-    verificationKey: VerificationKey;
+    verificationKey: ExtendedVerificationKey;
   };
   proposal: {
     id: DigestBlake2B256;

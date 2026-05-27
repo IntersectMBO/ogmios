@@ -312,7 +312,7 @@
         , "additionalProperties": false
         , "required": [ "verificationKey" ]
         , "properties":
-          { "verificationKey": { "$ref": "cardano.json#/definitions/VerificationKey" }
+          { "verificationKey": { "$ref": "cardano.json#/definitions/ExtendedVerificationKey" }
           }
         }
       , "proposal":
