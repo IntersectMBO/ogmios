@@ -60,7 +60,7 @@ describe('TransactionSubmission', () => {
           await submit(someTransaction)
         } catch (e) {
           expect(e).toBeInstanceOf(JSONRPCError)
-          expect(e.code).toBe(3117)
+          expect(e.code).toBe(3997)
         }
       })
 
@@ -150,7 +150,7 @@ describe('TransactionSubmission', () => {
           },
           budget: {
             memory: 15694,
-            cpu: 3776833
+            cpu: 3776164
           }
         }])
       })
@@ -205,7 +205,7 @@ describe('TransactionSubmission', () => {
           },
           budget: {
             memory: 15694,
-            cpu: 3776833
+            cpu: 3776164
           }
         }])
       })
