@@ -106,7 +106,7 @@ describe('TransactionSubmission', () => {
             allegra: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
               'field Fee with key 2, not decoded.',
             shelley: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
-              'field Fee with key 2, not decoded.'
+              'field fee with key 2, not decoded.'
           })
         }
       })
