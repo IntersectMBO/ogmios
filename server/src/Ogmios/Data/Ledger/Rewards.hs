@@ -166,6 +166,9 @@ rewardsProvenance slotsPerEpoch b@(BlocksMade b') es@(EpochState acnt _ ss _) ma
         , pools
         }
   where
+    -- "go" snapshot = taken two epochs ago; this is what rewards are computed
+    -- against. `ssActiveStake` pairs each staking credential with both its
+    -- stake and its delegation pool, so there's no separate delegations map.
     SnapShot{ssActiveStake, ssTotalActiveStake, ssStakePoolsSnapShot} =
         ssStakeGo ss
 
@@ -209,6 +212,9 @@ rewardsProvenance slotsPerEpoch b@(BlocksMade b') es@(EpochState acnt _ ss _) ma
     totalStake =
         circulation es maxSupply
 
+    -- Invert the credential→StakeWithDelegation map into a per-pool map of
+    -- delegators. One pass: every StakeWithDelegation already carries both
+    -- the stake and the pool, so no cross-lookup is needed.
     delegators :: Map (KeyHash StakePool) (Map (Credential Staking) Coin)
     delegators =
         VMap.foldlWithKey
