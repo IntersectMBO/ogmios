@@ -902,15 +902,17 @@ spec = do
             Nothing
             (parseQueryNetworkBlockHeight (const $ genWithOrigin genBlockNo))
 
-        validateNetworkQuery
+        validateNetworkQueryTagged
             10
             "genesisConfiguration"
+            (Just "Shelley")
             (Just [aesonQQ|{ "era": "shelley" }|])
             (parseQueryNetworkGenesisConfiguration genGenesisConfig)
 
-        validateNetworkQuery
+        validateNetworkQueryTagged
             20
             "genesisConfiguration"
+            (Just "Alonzo")
             (Just [aesonQQ|{ "era": "alonzo" }|])
             (parseQueryNetworkGenesisConfiguration genGenesisConfig)
 
@@ -1391,13 +1393,28 @@ validateNetworkQuery ::
     Maybe Json.Value ->
     (Json.Value -> Json.Parser (QueryInEra Gen Block)) ->
     SpecWith ()
-validateNetworkQuery n subMethod params parser = do
+validateNetworkQuery n subMethod = validateNetworkQueryTagged n subMethod Nothing
+
+-- | Like 'validateNetworkQuery' but accepts an optional tag that disambiguates
+-- the on-disk golden vectors directory and the spec name. Use when two
+-- 'validateNetworkQuery' callers share the same @subMethod@ (e.g. covering
+-- different request shapes) so their goldens don't clobber each other.
+validateNetworkQueryTagged ::
+    Int ->
+    Text ->
+    Maybe Text ->
+    Maybe Json.Value ->
+    (Json.Value -> Json.Parser (QueryInEra Gen Block)) ->
+    SpecWith ()
+validateNetworkQueryTagged n subMethod tag params parser = do
     let category = "Network"
     let propName = "Query" <> category <> titleize subMethod
     let requestRef = "ogmios.json#/properties/" <> propName
     let responseRef = requestRef <> "Response"
     let method = "query" <> category <> "/" <> subMethod
-    parallel $ specify (toString propName) $ do
+    let vectorDir = toString propName <> maybe "" (("/" <>) . toString) tag
+    let specName = toString propName <> maybe "" (\t -> " (" <> toString t <> ")") tag
+    parallel $ specify specName $ do
         queryRefs <- unsafeReadSchemaRef (SchemaRef requestRef)
         runQuickCheck
             $ withMaxSuccess 1
@@ -1434,7 +1451,7 @@ validateNetworkQuery n subMethod params parser = do
                         error "unexpected effectful query in JSON spec"
                     Just (SomeStandardQuery _ encodeResult genResult) -> do
                         generateTestVectors
-                            (n, toString propName)
+                            (n, vectorDir)
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse encodeResult)
                         runQuickCheck
@@ -1447,7 +1464,7 @@ validateNetworkQuery n subMethod params parser = do
                                 )
                     Just (SomeCompoundQuery _ _ _ encodeResult genResult) -> do
                         generateTestVectors
-                            (n, toString propName)
+                            (n, vectorDir)
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse encodeResult)
                         runQuickCheck
@@ -1460,7 +1477,7 @@ validateNetworkQuery n subMethod params parser = do
                                 )
                     Just (SomeCompound2Query _ _ _ _ encodeResult genResult) -> do
                         generateTestVectors
-                            (n, toString propName)
+                            (n, vectorDir)
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse encodeResult)
                         runQuickCheck
@@ -1473,7 +1490,7 @@ validateNetworkQuery n subMethod params parser = do
                                 )
                     Just (SomeAdHocQuery _ encodeResult genResult) -> do
                         generateTestVectors
-                            (n, toString propName)
+                            (n, vectorDir)
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse (Right . encodeResult))
                         runQuickCheck
