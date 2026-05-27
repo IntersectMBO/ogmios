@@ -6,9 +6,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- NOTE: Needed because of auto-generated template-haskell code for wai-routes.
-{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
-
 module Ogmios.App.Server.Http
     ( mkHttpApp
     , healthCheck
