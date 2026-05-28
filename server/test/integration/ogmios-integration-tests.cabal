@@ -1,0 +1,30 @@
+cabal-version: 3.0
+name:          ogmios-integration-tests
+version:       0.1.0.0
+license:       MPL-2.0
+build-type:    Simple
+
+executable ogmios-integration-tests
+  main-is:          Main.hs
+  hs-source-dirs:   src
+  default-language:  Haskell2010
+  ghc-options:      -Wall -threaded -rtsopts -with-rtsopts=-N
+
+  other-modules:
+    Test.Integration.Env
+    Test.Integration.Utxo
+
+  build-depends:
+    , base           >= 4.14 && < 5
+    , aeson
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , network
+    , process
+    , tasty
+    , tasty-hunit
+    , temporary
+    , text
+    , websockets
