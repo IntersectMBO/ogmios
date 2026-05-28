@@ -11,6 +11,7 @@ executable ogmios-integration-tests
   ghc-options:      -Wall -threaded -rtsopts -with-rtsopts=-N
 
   other-modules:
+    Test.Integration.Constitution
     Test.Integration.Env
     Test.Integration.Epoch
     Test.Integration.LedgerTip

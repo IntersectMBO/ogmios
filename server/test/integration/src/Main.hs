@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Test.Tasty (defaultMain, testGroup)
+import Test.Integration.Constitution (constitutionTests)
 import Test.Integration.Env (withTestEnv)
 import Test.Integration.Epoch (epochTests)
 import Test.Integration.LedgerTip (ledgerTipTests)
@@ -23,4 +24,5 @@ main = defaultMain $
       , stakePoolsTests getEnv
       , rewardAccountSummariesTests getEnv
       , liveStakeDistributionTests getEnv
+      , constitutionTests getEnv
       ]
