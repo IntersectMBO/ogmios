@@ -16,6 +16,7 @@ executable ogmios-integration-tests
     Test.Integration.LedgerTip
     Test.Integration.NetworkTip
     Test.Integration.ProtocolParameters
+    Test.Integration.StakePools
     Test.Integration.Utxo
 
   build-depends:
