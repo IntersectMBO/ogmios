@@ -2651,12 +2651,17 @@
 
   , "Signatory":
     { "title": "Signatory"
-    , "description": "A signatory (EdDSA) for the transaction. The fields 'chainCode' and 'addressAttributes' are only present on bootstrap signatures (when spending from a Byron/Bootstrap address)."
+    , "description": "A signatory (EdDSA) for the transaction. The fields 'chainCode' and 'addressAttributes' are only present on bootstrap signatures (when spending from a Byron/Bootstrap address). On Byron, the 'key' is an Ed25519-BIP32 XPub (key + chain-code) so the chain-code is carried inline; on Shelley and later it is a plain Ed25519 key with the chain-code in the separate 'chainCode' field."
     , "type": "object"
     , "additionalProperties": false
     , "required": [ "signature", "key" ]
     , "properties":
-      { "key": { "$ref": "cardano.json#/definitions/VerificationKey" }
+      { "key":
+        { "oneOf":
+          [ { "$ref": "cardano.json#/definitions/VerificationKey" }
+          , { "$ref": "cardano.json#/definitions/ExtendedVerificationKey" }
+          ]
+        }
       , "signature": { "$ref": "cardano.json#/definitions/Signature" }
       , "chainCode": { "$ref": "cardano.json#/definitions/ChainCode" }
       , "addressAttributes": { "$ref": "cardano.json#/definitions/AddressAttributes" }
