@@ -32,6 +32,7 @@ import System.Environment (getEnvironment)
 import System.FilePath ((</>), takeFileName)
 import System.IO (Handle, IOMode(..), hClose, openFile)
 import System.IO.Temp (createTempDirectory, getCanonicalTemporaryDirectory)
+import System.Exit (ExitCode(..))
 import System.Process
     ( CreateProcess(..)
     , ProcessHandle
@@ -45,6 +46,7 @@ import Test.Tasty (TestTree, withResource)
 
 data TestEnv = TestEnv
   { envWorkDir      :: !FilePath
+  , envTestnetDir   :: !FilePath
   , envNodeSocket   :: !FilePath
   , envNodeConfig   :: !FilePath
   , envOgmiosPort   :: !Int
@@ -121,8 +123,12 @@ setup = do
   waitForTcpPort ogmiosPort 60
   putStrLn "[integration] ogmios is ready."
 
+  -- Run tx-generator to populate the UTxO set
+  runTxGenerator workDir testnetDir
+
   let testEnv = TestEnv
         { envWorkDir      = workDir
+        , envTestnetDir   = testnetDir
         , envNodeSocket   = socketPath
         , envNodeConfig   = configPath
         , envOgmiosPort   = ogmiosPort
@@ -211,6 +217,39 @@ findNodeConfig dir = tryNames configNames
       case result of
         Just path -> pure path
         Nothing   -> tryNames rest
+
+runTxGenerator :: FilePath -> FilePath -> IO ()
+runTxGenerator workDir testnetDir = do
+  let configFile = workDir </> "tx-generator-config.json"
+      sigKeyPath = testnetDir </> "utxo-keys" </> "utxo1" </> "utxo.skey"
+  writeFile configFile $ unlines
+    [ "{"
+    , "  \"tx_count\": 30,"
+    , "  \"tps\": 10,"
+    , "  \"inputs_per_tx\": 2,"
+    , "  \"outputs_per_tx\": 2,"
+    , "  \"tx_fee\": 212345,"
+    , "  \"min_utxo_value\": 1000000,"
+    , "  \"add_tx_size\": 39,"
+    , "  \"init_cooldown\": 5,"
+    , "  \"era\": \"Conway\","
+    , "  \"keepalive\": 30,"
+    , "  \"debugMode\": false,"
+    , "  \"plutus\": null,"
+    , "  \"sigKey\": " <> show sigKeyPath
+    , "}"
+    ]
+  putStrLn "[integration] running tx-generator..."
+  (_, _, _, ph) <- createProcess
+    (proc "tx-generator"
+      [ "json_highlevel", configFile
+      , "--testnet-config-dir", testnetDir
+      ])
+    { cwd = Just workDir }
+  exitCode <- waitForProcess ph
+  case exitCode of
+    ExitSuccess   -> putStrLn "[integration] tx-generator finished."
+    ExitFailure c -> fail $ "tx-generator exited with code " <> show c
 
 waitForTcpPort :: Int -> Int -> IO ()
 waitForTcpPort port maxSeconds = go maxSeconds
