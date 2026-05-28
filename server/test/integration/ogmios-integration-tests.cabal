@@ -13,6 +13,7 @@ executable ogmios-integration-tests
   other-modules:
     Test.Integration.Env
     Test.Integration.LedgerTip
+    Test.Integration.NetworkTip
     Test.Integration.ProtocolParameters
     Test.Integration.Utxo
 
