@@ -54,9 +54,9 @@ jobs:
           substituters = https://cache.iog.io/ https://cache.nixos.org/
 
     # Temporary: poll the Nix cache directly until Hydra check-run reporting is fixed
-    - name: Wait for ogmios-exe in Hydra cache
+    - name: Wait for ogmios in Hydra cache
       run: |
-        out=$(nix eval --raw "git+https://github.com/$GITHUB_REPOSITORY?rev=$GITHUB_SHA&submodules=1#ogmios-exe")
+        out=$(nix eval --raw "git+https://github.com/$GITHUB_REPOSITORY?rev=$GITHUB_SHA&submodules=1#ogmios")
         echo "Waiting for $out in cache..."
         deadline=$((SECONDS + 1800))
         while true; do
@@ -74,7 +74,7 @@ jobs:
 
     - name: Download ogmios binary from Hydra cache
       run: |
-        nix build .#ogmios-exe --builders "" --max-jobs 0
+        nix build .#ogmios --builders "" --max-jobs 0
         mkdir -p server/bin
         cp result/bin/ogmios server/bin/ogmios
         chmod +x server/bin/ogmios

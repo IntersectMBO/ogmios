@@ -12,6 +12,6 @@
     };
     muslExes = muslProject.hsPkgs.ogmios.components.exes;
   in {
-    packages.ogmios-exe-musl = muslExes.ogmios;
+    packages.ogmios-musl = muslExes.ogmios;
   };
 }

@@ -6,8 +6,8 @@
     {
       packages = {
         default = ogmios.components.exes.ogmios;
-        ogmios = ogmios.components.library;
-        ogmios-exe = ogmios.components.exes.ogmios;
+        ogmios = ogmios.components.exes.ogmios;
+        ogmios-lib = ogmios.components.library;
       };
 
       checks.ogmios-unit = ogmios.checks.unit;

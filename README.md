@@ -149,6 +149,28 @@ git submodule update --init --recursive
 nix develop "git+file:.?submodules=1" --impure
 ```
 
+The `git submodule update` step is required *before* `nix develop` because the
+flake declares `self.submodules = true`; Nix's git fetcher reads submodule
+contents while fetching the flake source itself, so a fresh clone with no
+submodules initialised will fail to evaluate. The flake's `shellHook` re-runs
+the submodule update on each shell entry, but it can't bootstrap a cold clone
+since the hook only runs after the source fetch succeeds.
+
+### Building
+
+```sh
+# Dynamic glibc build (default)
+nix build .#ogmios
+
+# Fully static musl build
+nix build .#ogmios-musl
+
+# Library only
+nix build .#ogmios-lib
+```
+
+`nix build` (no target) is equivalent to `nix build .#ogmios`.
+
 ## Sponsors
 
 A big thank to [all our sponsors 💖](https://github.com/CardanoSolutions#-sponsors).
