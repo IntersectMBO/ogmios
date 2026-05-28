@@ -128,6 +128,73 @@ Ogmios provides a language-agnostic API which can be implemented using any WebSo
 </tr>
 <thead></table>
 
+## Development
+
+This project uses a [Nix flake](https://nixos.wiki/wiki/Flakes) for development and CI.
+
+### With direnv
+
+If you have [direnv](https://direnv.net/) installed, simply run:
+
+```sh
+direnv allow
+```
+
+This will automatically initialize git submodules and enter the development shell.
+
+### Without direnv
+
+```sh
+git submodule update --init --recursive
+nix develop "git+file:.?submodules=1" --impure
+```
+
+The `git submodule update` step is required *before* `nix develop` because the
+flake declares `self.submodules = true`; Nix's git fetcher reads submodule
+contents while fetching the flake source itself, so a fresh clone with no
+submodules initialised will fail to evaluate. The flake's `shellHook` re-runs
+the submodule update on each shell entry, but it can't bootstrap a cold clone
+since the hook only runs after the source fetch succeeds.
+
+### Building
+
+```sh
+# Dynamic glibc build (default)
+nix build .#ogmios
+
+# Fully static musl build
+nix build .#ogmios-musl
+
+# Library only
+nix build .#ogmios-lib
+```
+
+`nix build` (no target) is equivalent to `nix build .#ogmios`.
+
+#### Building from outside the repo
+
+You can build any of the flake outputs directly from a remote reference without
+cloning. The `?submodules=1` query is required so Nix's git fetcher pulls in
+`server/modules/` and the other submodules that the build depends on:
+
+```sh
+# Build the default ogmios executable from the latest master
+nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1'
+
+# Specific tag or branch via ?ref=
+nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1&ref=v6.14.1#ogmios-musl'
+```
+
+### Without Nix (`cabal` via `make shell`)
+
+```sh
+git submodule update --init --recursive
+cd server
+make shell            # enters GHC 9.6.5 devx environment (CardanoSolutions/devx)
+cabal update          # inside the shell, once per index-state bump
+cabal build all
+```
+
 ## Sponsors
 
 A big thank to [all our sponsors 💖](https://github.com/CardanoSolutions#-sponsors).
