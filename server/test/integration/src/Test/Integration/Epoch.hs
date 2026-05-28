@@ -24,14 +24,14 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.WebSockets as WS
 
-import Test.Integration.Env (TestEnv(..))
+import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
 
 epochTests :: IO TestEnv -> TestTree
 epochTests getEnv = testGroup "Epoch"
   [ testCase "epoch matches cardano-cli tip epoch" $ do
       env <- getEnv
 
-      ogmiosResp <- queryOgmios (envOgmiosPort env)
+      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) queryOgmios
       ogmiosEpoch <- case ogmiosResp of
         Object o
           | Just (Number n) <- KM.lookup "result" o -> pure (round n :: Integer)

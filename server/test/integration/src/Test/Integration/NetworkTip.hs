@@ -25,7 +25,7 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.WebSockets as WS
 
-import Test.Integration.Env (TestEnv(..))
+import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
 
 networkTipTests :: IO TestEnv -> TestTree
 networkTipTests getEnv = testGroup "NetworkTip"
@@ -35,7 +35,7 @@ networkTipTests getEnv = testGroup "NetworkTip"
       cliBefore <- queryCli (envWorkDir env) (envNodeSocket env) (envTestnetMagic env) "cli-network-tip-before.json"
       cSlotBefore <- parseField cliBefore "slot"
 
-      ogmiosResp <- queryOgmios (envOgmiosPort env)
+      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) queryOgmios
       ogmiosResult <- case ogmiosResp of
         Object o
           | Just result <- KM.lookup "result" o -> pure result

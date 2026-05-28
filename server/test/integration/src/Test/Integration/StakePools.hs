@@ -28,14 +28,14 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Set as Set
 import qualified Network.WebSockets as WS
 
-import Test.Integration.Env (TestEnv(..))
+import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
 
 stakePoolsTests :: IO TestEnv -> TestTree
 stakePoolsTests getEnv = testGroup "StakePools"
   [ testCase "stakePool IDs match cardano-cli" $ do
       env <- getEnv
 
-      ogmiosResp <- queryOgmios (envOgmiosPort env)
+      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) queryOgmios
       ogmiosResult <- case ogmiosResp of
         Object o
           | Just result <- KM.lookup "result" o -> pure result

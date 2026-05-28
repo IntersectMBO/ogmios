@@ -24,14 +24,14 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.WebSockets as WS
 
-import Test.Integration.Env (TestEnv(..))
+import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
 
 constitutionTests :: IO TestEnv -> TestTree
 constitutionTests getEnv = testGroup "Constitution"
   [ testCase "constitution matches cardano-cli" $ do
       env <- getEnv
 
-      ogmiosResp <- queryOgmios (envOgmiosPort env)
+      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) queryOgmios
       ogmiosResult <- case ogmiosResp of
         Object o
           | Just result <- KM.lookup "result" o -> pure result

@@ -5,6 +5,7 @@
 module Test.Integration.Env
   ( TestEnv(..)
   , withTestEnv
+  , queryOgmiosRetry
   ) where
 
 import Control.Concurrent (threadDelay)
@@ -274,3 +275,16 @@ waitForTcpPort port maxSeconds = go maxSeconds
       case result of
         Right () -> pure ()
         Left _   -> threadDelay 1000000 >> go (n - 1)
+
+-- | Query ogmios via WebSocket with retries.
+-- Ogmios may temporarily lose its node connection (especially after
+-- tx-generator load), so we retry on any exception.
+queryOgmiosRetry :: Int -> (Int -> IO a) -> IO a
+queryOgmiosRetry port action = go (5 :: Int)
+  where
+    go 0 = action port
+    go n = do
+      result <- try @SomeException (action port)
+      case result of
+        Right val -> pure val
+        Left _    -> threadDelay 2000000 >> go (n - 1)

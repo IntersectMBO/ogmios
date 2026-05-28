@@ -25,7 +25,7 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.WebSockets as WS
 
-import Test.Integration.Env (TestEnv(..))
+import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
 
 rewardAccountSummariesTests :: IO TestEnv -> TestTree
 rewardAccountSummariesTests getEnv = testGroup "RewardAccountSummaries"
@@ -45,7 +45,7 @@ rewardAccountSummariesTests getEnv = testGroup "RewardAccountSummaries"
         []       -> assertFailure "cardano-cli stake-address build returned empty output"
 
       -- Query ogmios
-      ogmiosResp <- queryOgmios (envOgmiosPort env) stakeAddr
+      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) (\p -> queryOgmios p stakeAddr)
       ogmiosResult <- case ogmiosResp of
         Object o
           | Just result <- KM.lookup "result" o -> pure result

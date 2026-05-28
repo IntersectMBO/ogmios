@@ -25,7 +25,7 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as LBS
 import qualified Network.WebSockets as WS
 
-import Test.Integration.Env (TestEnv(..))
+import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
 
 ledgerTipTests :: IO TestEnv -> TestTree
 ledgerTipTests getEnv = testGroup "LedgerTip"
@@ -35,7 +35,7 @@ ledgerTipTests getEnv = testGroup "LedgerTip"
       cliBefore <- queryCli (envWorkDir env) (envNodeSocket env) (envTestnetMagic env) "cli-tip-before.json"
       cSlotBefore <- parseField cliBefore "slot"
 
-      ogmiosResp <- queryOgmios (envOgmiosPort env)
+      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) queryOgmios
       ogmiosResult <- case ogmiosResp of
         Object o
           | Just result <- KM.lookup "result" o -> pure result

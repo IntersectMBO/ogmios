@@ -31,7 +31,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Network.WebSockets as WS
 
-import Test.Integration.Env (TestEnv(..))
+import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
 
 -- ---------------------------------------------------------------------------
 -- Normalized UTxO representation
@@ -54,7 +54,7 @@ utxoTests getEnv = testGroup "UTxO"
       env <- getEnv
 
       -- Query ogmios via WebSocket
-      ogmiosResp <- queryOgmiosWholeUtxo (envOgmiosPort env)
+      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) queryOgmiosWholeUtxo
       ogmiosResult <- case ogmiosResp of
         Object o
           | Just result <- KM.lookup "result" o -> pure result
