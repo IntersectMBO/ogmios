@@ -6,6 +6,7 @@ import Test.Integration.Epoch (epochTests)
 import Test.Integration.LedgerTip (ledgerTipTests)
 import Test.Integration.NetworkTip (networkTipTests)
 import Test.Integration.ProtocolParameters (protocolParametersTests)
+import Test.Integration.RewardAccountSummaries (rewardAccountSummariesTests)
 import Test.Integration.StakePools (stakePoolsTests)
 import Test.Integration.Utxo (utxoTests)
 
@@ -19,4 +20,5 @@ main = defaultMain $
       , networkTipTests getEnv
       , epochTests getEnv
       , stakePoolsTests getEnv
+      , rewardAccountSummariesTests getEnv
       ]
