@@ -14,6 +14,7 @@ executable ogmios-integration-tests
     Test.Integration.Env
     Test.Integration.Epoch
     Test.Integration.LedgerTip
+    Test.Integration.LiveStakeDistribution
     Test.Integration.NetworkTip
     Test.Integration.ProtocolParameters
     Test.Integration.RewardAccountSummaries
