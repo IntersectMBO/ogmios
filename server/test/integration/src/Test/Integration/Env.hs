@@ -124,7 +124,7 @@ setup = do
   putStrLn "[integration] ogmios is ready."
 
   -- Run tx-generator to populate the UTxO set
-  runTxGenerator workDir testnetDir
+  runTxGenerator workDir logsDir testnetDir
 
   let testEnv = TestEnv
         { envWorkDir      = workDir
@@ -218,8 +218,8 @@ findNodeConfig dir = tryNames configNames
         Just path -> pure path
         Nothing   -> tryNames rest
 
-runTxGenerator :: FilePath -> FilePath -> IO ()
-runTxGenerator workDir testnetDir = do
+runTxGenerator :: FilePath -> FilePath -> FilePath -> IO ()
+runTxGenerator workDir logsDir testnetDir = do
   let configFile = workDir </> "tx-generator-config.json"
       sigKeyPath = testnetDir </> "utxo-keys" </> "utxo1" </> "utxo.skey"
   writeFile configFile $ unlines
@@ -240,13 +240,20 @@ runTxGenerator workDir testnetDir = do
     , "}"
     ]
   putStrLn "[integration] running tx-generator..."
+  txgenStdout <- openFile (logsDir </> "tx-generator.stdout") WriteMode
+  txgenStderr <- openFile (logsDir </> "tx-generator.stderr") WriteMode
   (_, _, _, ph) <- createProcess
     (proc "tx-generator"
       [ "json_highlevel", configFile
       , "--testnet-config-dir", testnetDir
       ])
-    { cwd = Just workDir }
+    { cwd = Just workDir
+    , std_out = UseHandle txgenStdout
+    , std_err = UseHandle txgenStderr
+    }
   exitCode <- waitForProcess ph
+  hClose txgenStdout
+  hClose txgenStderr
   case exitCode of
     ExitSuccess   -> putStrLn "[integration] tx-generator finished."
     ExitFailure c -> fail $ "tx-generator exited with code " <> show c
