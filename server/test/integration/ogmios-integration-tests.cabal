@@ -12,6 +12,7 @@ executable ogmios-integration-tests
 
   other-modules:
     Test.Integration.Constitution
+    Test.Integration.DelegateRepresentatives
     Test.Integration.Env
     Test.Integration.Epoch
     Test.Integration.LedgerTip
