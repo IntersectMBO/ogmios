@@ -1,5 +1,5 @@
 { inputs, ... }: {
-  perSystem = { shellFor, pkgs, ... }: {
+  perSystem = { shellFor, hsPkgs, pkgs, system, ... }: {
     devShells.default = shellFor {
       packages = p: [ p.ogmios ];
 
@@ -28,6 +28,29 @@
       '';
 
       withHoogle = true;
+    };
+
+    devShells.integration = let
+      cn = inputs.cardano-node.packages.${system};
+    in shellFor {
+      packages = p: [ p.ogmios p.ogmios-integration-tests ];
+
+      nativeBuildInputs = [
+        pkgs.jq
+        hsPkgs.ogmios.components.exes.ogmios
+        cn.cardano-node
+        cn.cardano-cli
+        cn.cardano-testnet
+        cn.tx-generator
+      ];
+
+      tools = {
+        cabal = "latest";
+      };
+
+      shellHook = ''
+        export LANG="en_US.UTF-8"
+      '';
     };
   };
 }
