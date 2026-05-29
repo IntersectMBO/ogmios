@@ -1,7 +1,7 @@
 _config: !include ".hpack.config.yaml"
 
 name:                ogmios
-version:             0
+version:             6.14.0.1
 stability:           stable
 github:              "cardanosolutions/ogmios"
 license:             MPL-2.0
@@ -58,6 +58,7 @@ library:
     - cardano-ledger-byron
     - cardano-ledger-conway
     - cardano-ledger-core
+    - cardano-ledger-dijkstra
     - cardano-ledger-mary
     - cardano-ledger-shelley
     - cardano-ledger-shelley
@@ -88,13 +89,12 @@ library:
     - mtl
     - optparse-applicative
     - ouroboros-consensus
-    - ouroboros-consensus-cardano
-    - ouroboros-consensus-protocol
-    - ouroboros-network
-    - ouroboros-network-api
-    - ouroboros-network-framework
+    - ouroboros-consensus:cardano
+    - ouroboros-consensus:protocol
+    - ouroboros-network:api
+    - ouroboros-network:framework
     - ouroboros-network-ogmios
-    - ouroboros-network-protocols
+    - ouroboros-network:protocols
     - plutus-core
     - plutus-ledger-api
     - prettyprinter
@@ -169,12 +169,12 @@ tests:
     - lens-aeson
     - ogmios
     - ouroboros-consensus
-    - ouroboros-consensus-cardano
-    - ouroboros-consensus-cardano:unstable-cardano-testlib
-    - ouroboros-network-api
-    - ouroboros-network-framework
+    - ouroboros-consensus:cardano
+    - ouroboros-consensus:unstable-cardano-testlib
+    - ouroboros-network:api
+    - ouroboros-network:framework
     - ouroboros-network-ogmios
-    - ouroboros-network-protocols
+    - ouroboros-network:protocols
     - QuickCheck
     - random
     - strict-sop-core

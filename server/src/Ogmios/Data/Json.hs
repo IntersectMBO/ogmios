@@ -47,8 +47,35 @@ import Ogmios.Data.Json.Prelude
 import Cardano.Ledger.Binary
     ( ToCBOR (..)
     )
+import Cardano.Ledger.Allegra
+    ( ApplyTxError (AllegraApplyTxError)
+    )
+import Cardano.Ledger.Alonzo
+    ( ApplyTxError (AlonzoApplyTxError)
+    )
+import Cardano.Ledger.Alonzo.Tx
+    ( unAlonzoTx
+    )
+import Cardano.Ledger.Babbage
+    ( ApplyTxError (BabbageApplyTxError)
+    )
+import Cardano.Ledger.Babbage.Tx
+    ( unBabbageTx
+    )
+import Cardano.Ledger.Conway
+    ( ApplyTxError (ConwayApplyTxError)
+    )
+import Cardano.Ledger.Conway.Tx
+    ( unConwayTx
+    )
+import Cardano.Ledger.Dijkstra.Tx
+    ( unDijkstraTx
+    )
+import Cardano.Ledger.Mary
+    ( ApplyTxError (MaryApplyTxError)
+    )
 import Cardano.Ledger.Shelley.API
-    ( ApplyTxError (..)
+    ( ApplyTxError (ShelleyApplyTxError)
     )
 import Cardano.Network.Protocol.NodeToClient
     ( GenTx
@@ -118,6 +145,7 @@ import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Byron as Byron
 import qualified Ogmios.Data.Json.Conway as Conway
+import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
 import qualified Ogmios.Data.Json.Mary as Mary
 import qualified Ogmios.Data.Json.Shelley as Shelley
 
@@ -170,6 +198,8 @@ encodeBlock opts = \case
         Babbage.encodeBlock opts blk
     BlockConway blk ->
         Conway.encodeBlock opts blk
+    BlockDijkstra blk ->
+        Dijkstra.encodeBlock opts blk
 
 encodeSubmitTransactionError
     :: (Rpc.FaultCode -> String -> Maybe Json -> Json)
@@ -182,26 +212,28 @@ encodeSubmitTransactionError reject = \case
             \submit a transaction near an era boundary (i.e. at the moment of a hard-fork). \
             \Retrying should help."
             (pure $ encodeEraMismatch e)
-    ApplyTxErrConway (ApplyTxError xs) ->
+    ApplyTxErrConway (ConwayApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Conway.encodeLedgerFailure <$> xs)
-    ApplyTxErrBabbage (ApplyTxError xs) ->
+    ApplyTxErrBabbage (BabbageApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Babbage.encodeLedgerFailure <$> xs)
-    ApplyTxErrAlonzo (ApplyTxError xs) ->
+    ApplyTxErrAlonzo (AlonzoApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Alonzo.encodeLedgerFailure <$> xs)
-    ApplyTxErrMary (ApplyTxError xs) ->
+    ApplyTxErrMary (MaryApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Mary.encodeLedgerFailure <$> xs)
-    ApplyTxErrAllegra (ApplyTxError xs) ->
+    ApplyTxErrAllegra (AllegraApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Allegra.encodeLedgerFailure <$> xs)
-    ApplyTxErrShelley (ApplyTxError xs) ->
+    ApplyTxErrShelley (ShelleyApplyTxError xs) ->
         (encodePredicateFailure reject . pickPredicateFailure)
             (Shelley.encodeLedgerFailure <$> xs)
     ApplyTxErrByron{} ->
         error "encodeSubmitTransactionError: unsupported Byron transaction."
+    ApplyTxErrDijkstra{} ->
+        error "encodeSubmitTransactionError: Dijkstra submission errors not yet wired."
 
 encodeSerializedTransaction
     :: (PraosCrypto crypto, TPraos.PraosCrypto crypto)
@@ -222,6 +254,8 @@ encodeSerializedTransaction =
         GenTxBabbage tx ->
             toCBOR tx
         GenTxConway tx ->
+            toCBOR tx
+        GenTxDijkstra tx ->
             toCBOR tx
 
 encodeTip
@@ -245,11 +279,13 @@ encodeTx
     -> Json
 encodeTx opts = \case
     GenTxConway (ShelleyTx _ x) ->
-        Conway.encodeTx opts x
+        Conway.encodeTx opts (unConwayTx x)
+    GenTxDijkstra (ShelleyTx _ x) ->
+        Dijkstra.encodeTx opts (unDijkstraTx x)
     GenTxBabbage (ShelleyTx _ x) ->
-        Babbage.encodeTx opts x
+        Babbage.encodeTx opts (unBabbageTx x)
     GenTxAlonzo (ShelleyTx _ x) ->
-        Alonzo.encodeTx opts x
+        Alonzo.encodeTx opts (unAlonzoTx x)
     GenTxMary (ShelleyTx _ x) ->
         Mary.encodeTx opts x
     GenTxAllegra (ShelleyTx _ x) ->
@@ -263,6 +299,8 @@ encodeGenTxId
     :: GenTxId (CardanoBlock crypto)
     -> Json
 encodeGenTxId = encodeObject . \case
+    GenTxIdDijkstra (ShelleyTxId x) ->
+        Shelley.encodeTxId x
     GenTxIdConway (ShelleyTxId x) ->
         Shelley.encodeTxId x
     GenTxIdBabbage (ShelleyTxId x) ->
@@ -309,6 +347,7 @@ encodeDeserialisationFailure reject errs =
                 ShelleyBasedEraAlonzo  -> "alonzo"
                 ShelleyBasedEraBabbage -> "babbage"
                 ShelleyBasedEraConway  -> "conway"
+                ShelleyBasedEraDijkstra -> "dijkstra"
          in
             k .= encodeDecoderError size e
 
@@ -353,6 +392,9 @@ encodeDeserialisationFailure reject errs =
           . T.replace " AlonzoEra" ""
           . T.replace " BabbageEra" ""
           . T.replace " ConwayEra" ""
+          . T.replace " DijkstraEra" ""
+          . T.replace " TopTx" ""
+          . T.replace " SubTx" ""
           . T.replace "value of type ConwayTxBodyRaw" "transaction body"
           . T.replace "value of type BabbageTxBodyRaw" "transaction body"
           . T.replace "value of type AlonzoTxBodyRaw" "transaction body"

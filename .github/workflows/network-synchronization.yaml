@@ -1,8 +1,9 @@
+---
 name: Network Synchronization
 
 on:
   schedule:
-    - cron: '00 06,18 * * *'
+  - cron: '00 06 */2 * *'
   workflow_dispatch:
     inputs:
       synchronization-level:
@@ -11,39 +12,109 @@ on:
         default: 1
         type: number
 
+env:
+  CARDANO_NODE_VERSION: "11.0.1"
+  S3_DB_PATH: s3://${{ secrets.AWS_S3_BUCKET }}/db-preview
+
 jobs:
   sync_and_cache:
-    strategy:
-      matrix:
-        network: [ preview ]
-        ogmios_version: [ v6.11.0 ]
-        cardano_node_version: [ 10.1.4 ]
-
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-
-    - name: 📥 Checkout repository
-      uses: actions/checkout@v3.5.3
-
-    - name: ⌚ Get Date/Time
-      id: date-time
-      shell: bash
+    - name: Download cardano-node configs
+      env:
+        BASE_URL: https://raw.githubusercontent.com/input-output-hk/cardano-playground/refs/tags/node-${{ env.CARDANO_NODE_VERSION }}-config/docs/environments/preview
       run: |
-        echo "timestamp=$(/bin/date -u '+%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        mkdir -p config/preview
+        cd config/preview
+        for f in config.json topology.json peer-snapshot.json checkpoints.json \
+                 byron-genesis.json shelley-genesis.json alonzo-genesis.json conway-genesis.json; do
+          curl -sfLO "$BASE_URL/$f"
+        done
 
-    - name: 💾 Cache cardano-node DB
-      id: cache
-      uses: actions/cache@v4
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
       with:
-        path: ${{ runner.temp }}/db-${{ matrix.network }}
-        key: cardano-node-ogmios-${{ matrix.network }}-${{ steps.date-time.outputs.timestamp }}
-        restore-keys: |
-          cardano-node-ogmios-${{ matrix.network }}-
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: ⟲ Sync Node
-      uses: CardanoSolutions/gh-action-cardano-node-ogmios-docker-sync@v1.2.2
+    - name: Install Nix
+      uses: cachix/install-nix-action@b97f05dcb019ddea06450a50ef6203d2fdc19fee # v31
       with:
-        db-dir: ${{ runner.temp }}/db-${{ matrix.network }}
-        network: ${{ matrix.network }}
-        version: ${{ matrix.ogmios_version }}_${{ matrix.cardano_node_version }}
-        synchronization-level: ${{ inputs.synchronization-level || 1 }}
+        extra_nix_config: |
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+          substituters = https://cache.iog.io/ https://cache.nixos.org/
+
+    - name: Restore cardano-node DB from S3
+      shell: bash {0}
+      env:
+        RUNNER_TEMP: ${{ runner.temp }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/db-preview"
+        for attempt in 1 2 3; do
+          echo "S3 sync attempt $attempt..."
+          nix shell nixpkgs#s5cmd -c \
+            s5cmd --log error sync "$S3_DB_PATH/*" "$RUNNER_TEMP/db-preview/" > /tmp/s3-sync.log 2>&1 &
+          pid=$!
+          while kill -0 "$pid" 2>/dev/null; do
+            du -sh "$RUNNER_TEMP/db-preview" 2>/dev/null
+            sleep 15
+          done
+          wait "$pid"
+          rc=$?
+          echo "S3 sync attempt $attempt finished (exit $rc). Last 30 lines of log:"
+          tail -30 /tmp/s3-sync.log
+          if [ "$rc" -eq 0 ]; then
+            echo "S3 sync succeeded"
+            break
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            exit 1
+          fi
+          echo "Retrying..."
+        done
+
+    - name: Sync node
+      id: sync
+      env:
+        CONFDIR: ${{ github.workspace }}/config/preview
+        RUNNER_TEMP: ${{ runner.temp }}
+        SYNC_LEVEL: ${{ inputs.synchronization-level || 1 }}
+      run: |
+        docker run -d --name cardano-node \
+          -v "$RUNNER_TEMP/db-preview:/db" \
+          -v "$RUNNER_TEMP/ipc:/ipc" \
+          -v "$CONFDIR:/config" \
+          "ghcr.io/intersectmbo/cardano-node:$CARDANO_NODE_VERSION" run --config /config/config.json --database-path /db --socket-path /ipc/node.socket --topology /config/topology.json
+
+        echo "Waiting for node socket..."
+        while [ ! -S "$RUNNER_TEMP/ipc/node.socket" ]; do
+          sleep 5
+        done
+
+        echo "Waiting for sync to reach $SYNC_LEVEL..."
+        while true; do
+          tip=$(docker exec cardano-node cardano-cli query tip --testnet-magic 2 2>/dev/null) || { sleep 5; continue; }
+          sync=$(echo "$tip" | jq -r '.syncProgress // "0"' | tr -d '%')
+          pct=$(echo "scale=4; $sync / 100" | bc)
+          echo "Sync progress: ${sync}%"
+          if [ "$(echo "$pct >= $SYNC_LEVEL" | bc)" -eq 1 ]; then
+            echo "Reached target sync level"
+            break
+          fi
+          sleep 30
+        done
+
+    - name: Stop cardano-node
+      if: always() && steps.sync.outcome != 'skipped'
+      run: |
+        docker stop cardano-node || true
+        docker rm cardano-node || true
+
+    - name: Save cardano-node DB to S3
+      if: always() && steps.sync.outcome != 'skipped'
+      env:
+        RUNNER_TEMP: ${{ runner.temp }}
+      run: |
+        nix shell nixpkgs#s5cmd -c \
+          s5cmd --log error sync "$RUNNER_TEMP/db-preview/" "$S3_DB_PATH/"

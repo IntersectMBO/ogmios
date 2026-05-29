@@ -6,11 +6,12 @@ module Ogmios.Data.Json.Allegra where
 
 import Ogmios.Data.Json.Prelude
 
-import Ouroboros.Consensus.Shelley.Ledger.Block
-    ( ShelleyBlock (..)
-    )
-import Ouroboros.Consensus.Shelley.Protocol.TPraos
-    ()
+import Ouroboros.Consensus.Shelley.Ledger.Block (
+    ShelleyBlock (..),
+ )
+import Ouroboros.Consensus.Shelley.Protocol.TPraos (
+
+ )
 
 import qualified Data.Map as Map
 
@@ -20,7 +21,7 @@ import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Block as Ledger
 import qualified Cardano.Ledger.Core as Ledger
 
-import qualified Cardano.Ledger.Shelley.BlockChain as Sh
+import qualified Cardano.Ledger.Shelley.BlockBody as Sh
 import qualified Cardano.Ledger.Shelley.Scripts as Sh
 import qualified Cardano.Ledger.Shelley.Tx as Sh
 import qualified Cardano.Ledger.Shelley.TxWits as Sh
@@ -38,10 +39,10 @@ type AuxiliaryScripts =
 --
 -- Encoders
 --
-encodeAuxiliaryData
-    :: (MetadataFormat, IncludeCbor)
-    -> Al.AllegraTxAuxData AllegraEra
-    -> (Json, AuxiliaryScripts)
+encodeAuxiliaryData ::
+    (MetadataFormat, IncludeCbor) ->
+    Al.AllegraTxAuxData AllegraEra ->
+    (Json, AuxiliaryScripts)
 encodeAuxiliaryData opts (Al.AllegraTxAuxData blob scripts) =
     ( Shelley.encodeMetadataBlob @AllegraEra opts blob
     , foldr
@@ -50,161 +51,203 @@ encodeAuxiliaryData opts (Al.AllegraTxAuxData blob scripts) =
         scripts
     )
 
-encodeBlock
-    :: (MetadataFormat, IncludeCbor)
-    -> ShelleyBlock (TPraos StandardCrypto) AllegraEra
-    -> Json
+encodeBlock ::
+    (MetadataFormat, IncludeCbor) ->
+    ShelleyBlock (TPraos StandardCrypto) AllegraEra ->
+    Json
 encodeBlock opts (ShelleyBlock (Ledger.Block blkHeader txs) headerHash) =
     encodeObject
-        ( "type" .= encodeText "praos"
-        <>
-          "era" .= encodeText "allegra"
-        <>
-          "id" .= Shelley.encodeShelleyHash headerHash
-        <>
-          Shelley.encodeBHeader blkHeader
-        <>
-          "size" .= encodeSingleton "bytes" (encodeWord32 (TPraos.bsize hBody))
-        <>
-          "transactions" .= encodeFoldable (encodeTx opts) (Sh.txSeqTxns' txs)
+        ( "type"
+            .= encodeText "praos"
+            <> "era"
+            .= encodeText "allegra"
+            <> "id"
+            .= Shelley.encodeShelleyHash headerHash
+            <> Shelley.encodeBHeader blkHeader
+            <> "size"
+            .= encodeSingleton "bytes" (encodeWord32 (TPraos.bsize hBody))
+            <> "transactions"
+            .= encodeFoldable (encodeTx opts) (Sh.shelleyBlockBodyTxs txs)
         )
   where
     TPraos.BHeader hBody _ = blkHeader
 
-encodeScript
-    :: ( Al.AllegraEraScript era
-       , Ledger.NativeScript era ~ Al.Timelock era
-       )
-    => IncludeCbor
-    -> Al.Timelock era
-    -> Json
-encodeScript opts = encodeObject . \case
-    timelock ->
-        "language" .=
-            encodeText "native" <>
-        "json" .=
-            encodeTimelock timelock <>
-        if includeScriptCbor opts then
-            "cbor" .=
-                encodeByteStringBase16 (Ledger.originalBytes timelock)
-        else
-            mempty
+encodeScript ::
+    ( Al.AllegraEraScript era
+    , Ledger.NativeScript era ~ Al.Timelock era
+    ) =>
+    IncludeCbor ->
+    Al.Timelock era ->
+    Json
+encodeScript opts =
+    encodeObject . \case
+        timelock ->
+            "language"
+                .= encodeText "native"
+                <> "json"
+                .= encodeTimelock timelock
+                <> if includeScriptCbor opts
+                    then
+                        "cbor"
+                            .= encodeByteStringBase16 (Ledger.originalBytes timelock)
+                    else
+                        mempty
 
-encodeTimelock
-    :: ( Al.AllegraEraScript era
-       , Ledger.NativeScript era ~ Al.Timelock era
-       )
-    => Al.Timelock era
-    -> Json
-encodeTimelock = encodeObject . \case
-    Sh.RequireSignature sig ->
-        "clause" .= encodeText "signature" <>
-        "from" .= Shelley.encodeKeyHash sig
-    Sh.RequireAllOf xs ->
-        "clause" .= encodeText "all" <>
-        "from" .= encodeFoldable encodeTimelock xs
-    Sh.RequireAnyOf xs ->
-        "clause" .= encodeText "any" <>
-        "from" .= encodeFoldable encodeTimelock xs
-    Sh.RequireMOf n xs ->
-        "clause" .= encodeText "some" <>
-        "atLeast" .= encodeInteger (toInteger n) <>
-        "from" .= encodeFoldable encodeTimelock xs
-    Al.RequireTimeExpire s ->
-        "clause" .= encodeText "before" <>
-        "slot" .= encodeSlotNo s
-    Al.RequireTimeStart s ->
-        "clause" .= encodeText "after" <>
-        "slot" .= encodeSlotNo s
+encodeTimelock ::
+    ( Al.AllegraEraScript era
+    , Ledger.NativeScript era ~ Al.Timelock era
+    ) =>
+    Al.Timelock era ->
+    Json
+encodeTimelock =
+    encodeObject . \case
+        Sh.RequireSignature sig ->
+            "clause"
+                .= encodeText "signature"
+                <> "from"
+                .= Shelley.encodeKeyHash sig
+        Sh.RequireAllOf xs ->
+            "clause"
+                .= encodeText "all"
+                <> "from"
+                .= encodeFoldable encodeTimelock xs
+        Sh.RequireAnyOf xs ->
+            "clause"
+                .= encodeText "any"
+                <> "from"
+                .= encodeFoldable encodeTimelock xs
+        Sh.RequireMOf n xs ->
+            "clause"
+                .= encodeText "some"
+                <> "atLeast"
+                .= encodeInteger (toInteger n)
+                <> "from"
+                .= encodeFoldable encodeTimelock xs
+        Al.RequireTimeExpire s ->
+            "clause"
+                .= encodeText "before"
+                <> "slot"
+                .= encodeSlotNo s
+        Al.RequireTimeStart s ->
+            "clause"
+                .= encodeText "after"
+                <> "slot"
+                .= encodeSlotNo s
+        -- The six Require* pattern synonyms above are exhaustive for any
+        -- Timelock era (see the per-era COMPLETE pragmas in
+        -- Cardano.Ledger.Allegra.Scripts).
+        _ ->
+            "clause" .= encodeText "unknown"
 
-encodeTx
-    :: (MetadataFormat, IncludeCbor)
-    -> Sh.ShelleyTx AllegraEra
-    -> Json
+encodeTx ::
+    (MetadataFormat, IncludeCbor) ->
+    Sh.Tx Ledger.TopTx AllegraEra ->
+    Json
 encodeTx (fmt, opts) x =
     encodeObject
-        ( Shelley.encodeTxId (Ledger.txIdTxBody @AllegraEra (Sh.body x))
-       <>
-        "spends" .= encodeText "inputs"
-       <>
-        encodeTxBody (Sh.body x) (strictMaybe mempty (Map.keys . snd) auxiliary)
-       <>
-        "metadata" .=? OmitWhenNothing fst auxiliary
-       <>
-        encodeWitnessSet opts (snd <$> auxiliary) (Sh.wits x)
-       <>
-        if includeTransactionCbor opts then
-           "cbor" .= encodeByteStringBase16 (encodeCbor @AllegraEra x)
-        else
-           mempty
-       )
+        ( Shelley.encodeTxId (Ledger.txIdTxBody @AllegraEra (x ^. Ledger.bodyTxL))
+            <> "spends"
+            .= encodeText "inputs"
+            <> encodeTxBody (x ^. Ledger.bodyTxL) (strictMaybe mempty (Map.keys . snd) auxiliary)
+            <> "metadata"
+            .=? OmitWhenNothing fst auxiliary
+            <> encodeWitnessSet opts (snd <$> auxiliary) (x ^. Ledger.witsTxL)
+            <> if includeTransactionCbor opts
+                then
+                    "cbor" .= encodeByteStringBase16 (encodeCbor @AllegraEra x)
+                else
+                    mempty
+        )
   where
     auxiliary = do
-        hash <- Shelley.encodeAuxiliaryDataHash <$> Al.atbAuxDataHash (Sh.body x)
-        (labels, scripts) <- encodeAuxiliaryData (fmt, opts) <$> Sh.auxiliaryData x
+        hash <- Shelley.encodeAuxiliaryDataHash <$> Al.atbAuxDataHash (x ^. Ledger.bodyTxL)
+        (labels, scripts) <- encodeAuxiliaryData (fmt, opts) <$> (x ^. Ledger.auxDataTxL)
         pure
             ( encodeObject ("hash" .= hash <> "labels" .= labels)
             , scripts
             )
 
-encodeTxBody
-    :: Al.AllegraTxBody AllegraEra
-    -> [Ledger.ScriptHash]
-    -> Series
+encodeTxBody ::
+    Ledger.TxBody Ledger.TopTx AllegraEra ->
+    [Ledger.ScriptHash] ->
+    Series
 encodeTxBody (Al.AllegraTxBody inps outs dCerts wdrls fee validity updates _) requiredScripts =
-    "inputs" .=
-        encodeFoldable (encodeObject . Shelley.encodeTxIn) inps <>
-    "outputs" .=
-        encodeFoldable (encodeObject . Shelley.encodeTxOut) outs <>
-    "withdrawals" .=? OmitWhen (null . Ledger.unWithdrawals)
-        Shelley.encodeWdrl wdrls <>
-    "certificates" .=? OmitWhen null
-        (encodeList encodeObject) certs <>
-    "requiredExtraScripts" .=? OmitWhen null
-        (encodeFoldable Shelley.encodeScriptHash) requiredScripts <>
-    "fee" .=
-        encodeCoin fee <>
-    "validityInterval" .=
-        encodeValidityInterval validity <>
-    "proposals" .=? OmitWhen null
-        (encodeList (encodeSingleton "action")) actions <>
-    "votes" .=? OmitWhen null
-        (encodeList Shelley.encodeGenesisVote) votes
+    "inputs"
+        .= encodeFoldable (encodeObject . Shelley.encodeTxIn) inps
+        <> "outputs"
+        .= encodeFoldable (encodeObject . Shelley.encodeTxOut) outs
+        <> "withdrawals"
+        .=? OmitWhen
+            (null . Ledger.unWithdrawals)
+            Shelley.encodeWdrl
+            wdrls
+        <> "certificates"
+        .=? OmitWhen
+            null
+            (encodeList encodeObject)
+            certs
+        <> "requiredExtraScripts"
+        .=? OmitWhen
+            null
+            (encodeFoldable Shelley.encodeScriptHash)
+            requiredScripts
+        <> "fee"
+        .= encodeCoin fee
+        <> "validityInterval"
+        .= encodeValidityInterval validity
+        <> "proposals"
+        .=? OmitWhen
+            null
+            (encodeList (encodeSingleton "action"))
+            actions
+        <> "votes"
+        .=? OmitWhen
+            null
+            (encodeList Shelley.encodeGenesisVote)
+            votes
   where
     (certs, mirs) =
         Shelley.encodeTxCerts dCerts
 
-    (votes, actions) = fromSMaybe ([], mirs) $
-        Shelley.encodeUpdate Shelley.encodePParamsUpdate mirs <$> updates
+    (votes, actions) =
+        fromSMaybe ([], mirs)
+            $ Shelley.encodeUpdate Shelley.encodePParamsUpdate mirs
+            <$> updates
 
-encodeUtxo
-    :: Sh.UTxO AllegraEra
-    -> Json
+encodeUtxo ::
+    Sh.UTxO AllegraEra ->
+    Json
 encodeUtxo =
     Shelley.encodeUtxo
 
-encodeValidityInterval
-    :: Al.ValidityInterval
-    -> Json
+encodeValidityInterval ::
+    Al.ValidityInterval ->
+    Json
 encodeValidityInterval x =
-    "invalidBefore" .=? OmitWhenNothing
-        encodeSlotNo (Al.invalidBefore x) <>
-    "invalidAfter" .=? OmitWhenNothing
-        encodeSlotNo (Al.invalidHereafter x)
-    & encodeObject
+    "invalidBefore"
+        .=? OmitWhenNothing
+            encodeSlotNo
+            (Al.invalidBefore x)
+        <> "invalidAfter"
+        .=? OmitWhenNothing
+            encodeSlotNo
+            (Al.invalidHereafter x)
+        & encodeObject
 
-encodeWitnessSet
-    :: IncludeCbor
-    -> StrictMaybe AuxiliaryScripts
-    -> Sh.ShelleyTxWits AllegraEra
-    -> Series
+encodeWitnessSet ::
+    IncludeCbor ->
+    StrictMaybe AuxiliaryScripts ->
+    Sh.ShelleyTxWits AllegraEra ->
+    Series
 encodeWitnessSet opts (fromSMaybe mempty -> auxScripts) x =
-    "signatories" .=
-        encodeFoldable2
+    "signatories"
+        .= encodeFoldable2
             Shelley.encodeBootstrapWitness
             Shelley.encodeWitVKey
             (Sh.bootWits x)
-            (Sh.addrWits x) <>
-    "scripts" .=? OmitWhen null
-        (encodeMap Shelley.stringifyScriptHash (encodeScript opts))
-        (Sh.scriptWits x <> auxScripts)
+            (Sh.addrWits x)
+        <> "scripts"
+        .=? OmitWhen
+            null
+            (encodeMap Shelley.stringifyScriptHash (encodeScript opts))
+            (Sh.scriptWits x <> auxScripts)

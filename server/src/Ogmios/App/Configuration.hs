@@ -144,20 +144,31 @@ readAlonzoGenesis configFile = do
         Nothing ->
             liftIO $ fail "Missing 'AlonzoGenesisFile' from node's configuration."
         Just (toString -> genesisFile) -> do
-            -- We have to decode Alonzo into an intermediate value first because
-            -- the default JSON decoder from the cardano-ledge can no longer
-            -- decode the genesis configuration.
+            -- The ledger's AlonzoGenesis JSON deserializer (parseCostModels with
+            -- isLenient=False in cardano-ledger-core) requires the PlutusV1 cost
+            -- model to contain exactly `costModelInitParamCount PlutusV1` (= 166)
+            -- entries, regardless of whether the cost model is encoded as an
+            -- array or a key-value map. When encoded as a map, every name in
+            -- `costModelInitParamNames PlutusV1` must additionally be present.
             --
-            -- The reason being that the decoder checks for the existence of
-            -- various parameters in the cost model for Plutus V1. Yet, new
-            -- parameters were added retro-actively to the cost model, so they
-            -- aren't present in the genesis config. But the decoder doesn't
-            -- care and fails.
+            -- Canonical Alonzo genesis files (mainnet, preview, preprod) ship
+            -- with exactly those 166 entries, so the decoder accepts them as-is
+            -- and this round-trip is a no-op for them. The workaround below is
+            -- only useful when a custom genesis is missing some init names:
+            -- `withFutureParameters` inserts placeholder zeros to reach 166 so
+            -- the decoder succeeds, and `withoutFutureParameters` then strips
+            -- those placeholders back off the resulting CostModel by
+            -- restricting to the names that were actually present in the input.
             --
-            -- So we have to manually add some placeholder key values to the
-            -- base genesis, so that the decoder can succeed; only to drop them
-            -- after from the map because they aren't actually part of the
-            -- genesis configuration.
+            -- A genesis with more than 166 entries is not handled here — the
+            -- count check would still fail since we never prune extras before
+            -- decoding.
+            --
+            -- The `extraConfig` field of AlonzoGenesis is intentionally left
+            -- untouched: its FromJSON is invoked with isLenient=True, so it
+            -- skips both the count and the by-name checks. It's primarily a
+            -- testing affordance.
+        
             value :: Yaml.Value <- Yaml.decodeFileThrow (replaceFileName configFile genesisFile)
 
             let (costModelsWithFutureParams, sourceParamNames) = withFutureParameters (value ^. getter)
@@ -183,24 +194,20 @@ readAlonzoGenesis configFile = do
         allV1ParamNames
 
     allV1ParamNames :: [Text]
-    allV1ParamNames = Ledger.costModelParamNames Ledger.PlutusV1
+    allV1ParamNames = Ledger.costModelInitParamNames Ledger.PlutusV1
 
     withoutFutureParameters :: Set Text -> GenesisConfig AlonzoEra -> GenesisConfig AlonzoEra
     withoutFutureParameters sourceParamNames config =
         let
             inner = Ledger.unAlonzoGenesisWrapper config
-            costModels = Ledger.uappCostModels inner
-            costModelsPruned = Map.adjust
-                (either (error . show) identity
-                    . Ledger.mkCostModel Ledger.PlutusV1
-                    . Map.elems
-                    . (`Map.restrictKeys` sourceParamNames)
-                    . Ledger.costModelToMap
-                )
-                Ledger.PlutusV1
-                (Ledger.costModelsValid costModels)
+            prunedV1 = either (error . show) identity
+                     . Ledger.mkCostModel Ledger.PlutusV1
+                     . Map.elems
+                     . (`Map.restrictKeys` sourceParamNames)
+                     . Ledger.costModelToMap
+                     $ Ledger.uappPlutusV1CostModel inner
          in
-            Ledger.AlonzoGenesisWrapper (inner { Ledger.uappCostModels = Ledger.mkCostModels costModelsPruned })
+            config { Ledger.unAlonzoGenesisWrapper = inner { Ledger.uappPlutusV1CostModel = prunedV1 } }
 
 
 readConwayGenesis :: MonadIO m => FilePath -> m (Either Text (GenesisConfig ConwayEra))

@@ -1118,7 +1118,7 @@ export interface MetadatumMap {
  * A signatory (EdDSA) for the transaction. The fields 'chainCode' and 'addressAttributes' are only present on bootstrap signatures (when spending from a Byron/Bootstrap address).
  */
 export interface Signatory {
-  key: VerificationKey;
+  key: VerificationKey | ExtendedVerificationKey;
   signature: Signature;
   chainCode?: ChainCode;
   addressAttributes?: AddressAttributes;
@@ -1187,7 +1187,7 @@ export interface BootstrapProtocolParameters {
 }
 export interface BootstrapVote {
   voter: {
-    verificationKey: VerificationKey;
+    verificationKey: ExtendedVerificationKey;
   };
   proposal: {
     id: DigestBlake2B256;

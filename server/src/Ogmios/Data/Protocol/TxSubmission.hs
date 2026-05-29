@@ -1,152 +1,149 @@
 --  This Source Code Form is subject to the terms of the Mozilla Public
 --  License, v. 2.0. If a copy of the MPL was not distributed with this
 --  file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-
+-- NOTE:
+-- Needed to derive 'ToJSON' and 'Show' instances for 'SubmitResult'.
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- NOTE:
 -- This module uses partial record field accessor to automatically derive
 -- JSON instances from the generic data-type structure. The partial fields are
 -- otherwise unused.
 {-# OPTIONS_GHC -fno-warn-partial-fields #-}
 
--- NOTE:
--- Needed to derive 'ToJSON' and 'Show' instances for 'SubmitResult'.
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+module Ogmios.Data.Protocol.TxSubmission (
+    -- * Codecs
+    TxSubmissionCodecs (..),
+    mkTxSubmissionCodecs,
 
-module Ogmios.Data.Protocol.TxSubmission
-    ( -- * Codecs
-      TxSubmissionCodecs (..)
-    , mkTxSubmissionCodecs
+    -- * Messages
+    TxSubmissionMessage (..),
 
-      -- * Messages
-    , TxSubmissionMessage (..)
+    -- ** SubmitTransaction
+    SubmitTransaction (..),
+    _decodeSubmitTransaction,
+    SubmitTransactionResponse (..),
+    _encodeSubmitTransactionResponse,
+    mkSubmitTransactionResponse,
 
-      -- ** SubmitTransaction
-    , SubmitTransaction (..)
-    , _decodeSubmitTransaction
-    , SubmitTransactionResponse (..)
-    , _encodeSubmitTransactionResponse
-    , mkSubmitTransactionResponse
+    -- ** EvaluateTransaction
+    EvaluateTransaction (..),
+    _decodeEvaluateTransaction,
+    EvaluateTransactionResponse (..),
+    EvaluateTransactionError (..),
+    NodeTipTooOldError (..),
+    evaluateExecutionUnits,
+    incompatibleEra,
+    unsupportedEra,
+    nodeTipTooOld,
+    _encodeEvaluateTransactionResponse,
+    CanEvaluateScriptsInEra,
 
-      -- ** EvaluateTransaction
-    , EvaluateTransaction (..)
-    , _decodeEvaluateTransaction
-    , EvaluateTransactionResponse (..)
-    , EvaluateTransactionError (..)
-    , NodeTipTooOldError (..)
-    , evaluateExecutionUnits
-    , incompatibleEra
-    , unsupportedEra
-    , nodeTipTooOld
-    , _encodeEvaluateTransactionResponse
-    , CanEvaluateScriptsInEra
+    -- ** Mempool / UTxO reconstruction
+    utxoFromMempool,
+    mergeUtxo,
+    utxoReferences,
 
-      -- ** Mempool / UTxO reconstruction
-    , utxoFromMempool
-    , mergeUtxo
-    , utxoReferences
-
-      -- ** Re-exports
-    , AlonzoEra
-    , ConwayEra
-    , BabbageEra
-    , EpochInfo
-    , ExUnits
-    , GenTxId
-    , HasTxId
-    , PastHorizonException
-    , TransactionScriptFailure
-    , SerializedTransaction
-    , SubmitTransactionError
-    , SystemStart
-    , Core.PParams
-    , Core.Tx
-    , TxIn (..)
-    , UTxO (..)
-    ) where
+    -- ** Re-exports
+    AlonzoEra,
+    ConwayEra,
+    BabbageEra,
+    EpochInfo,
+    ExUnits,
+    GenTxId,
+    HasTxId,
+    PastHorizonException,
+    TransactionScriptFailure,
+    SerializedTransaction,
+    SubmitTransactionError,
+    SystemStart,
+    Core.PParams,
+    Core.Tx,
+    TxIn (..),
+    UTxO (..),
+) where
 
 import Ogmios.Data.Json.Prelude
 
-import Cardano.Ledger.Alonzo.Plutus.Context
-    ( EraPlutusContext
-    )
-import Cardano.Ledger.Alonzo.Scripts
-    ( AlonzoScript
-    , AsIx
-    , ExUnits (..)
-    , PlutusPurpose
-    , Script
-    )
-import Cardano.Ledger.Alonzo.Tx
-    ( AlonzoEraTx
-    )
-import Cardano.Ledger.Alonzo.UTxO
-    ( AlonzoScriptsNeeded (..)
-    )
-import Cardano.Ledger.Api
-    ( TransactionScriptFailure
-    , evalTxExUnits
-    )
-import Cardano.Ledger.Api.Tx.In
-    ( TxId (..)
-    )
-import Cardano.Ledger.Babbage.TxBody
-    ( BabbageEraTxBody
-    )
-import Cardano.Ledger.Shelley.UTxO
-    ( UTxO (..)
-    )
-import Cardano.Ledger.State
-    ( EraUTxO (..)
-    )
-import Cardano.Ledger.TxIn
-    ( TxIn (..)
-    )
-import Cardano.Network.Protocol.NodeToClient
-    ( GenTxId
-    , SerializedTransaction
-    , SubmitTransactionError
-    )
-import Cardano.Slotting.EpochInfo
-    ( EpochInfo
-    , hoistEpochInfo
-    )
-import Cardano.Slotting.Time
-    ( SystemStart
-    )
-import Control.Arrow
-    ( left
-    )
-import Control.Monad.Trans.Except
-    ( Except
-    )
-import Ogmios.Data.EraTranslation
-    ( MultiEraUTxO (..)
-    , upgrade
-    )
-import Ogmios.Data.Ledger
-    ( ScriptPurposeIndexInAnyEra (..)
-    )
-import Ogmios.Data.Ledger.ScriptFailure
-    ( EvaluateTransactionError (..)
-    , NodeTipTooOldError (..)
-    , TransactionScriptFailureInAnyEra (..)
-    )
-import Ouroboros.Consensus.Cardano.Block
-    ( GenTx (..)
-    )
-import Ouroboros.Consensus.HardFork.History
-    ( PastHorizonException
-    )
-import Ouroboros.Consensus.Ledger.SupportsMempool
-    ( HasTxId (..)
-    )
-import Ouroboros.Network.Protocol.LocalTxSubmission.Type
-    ( SubmitResult (..)
-    )
+import Cardano.Ledger.Alonzo.Plutus.Context (
+    EraPlutusContext,
+ )
+import Cardano.Ledger.Alonzo.Scripts (
+    AlonzoScript,
+    AsIx,
+    ExUnits (..),
+    PlutusPurpose,
+    Script,
+ )
+import Cardano.Ledger.Alonzo.Tx (
+    AlonzoEraTx,
+ )
+import Cardano.Ledger.Alonzo.UTxO (
+    AlonzoScriptsNeeded (..),
+ )
+import Cardano.Ledger.Api (
+    TransactionScriptFailure,
+    evalTxExUnits,
+ )
+import Cardano.Ledger.Api.Tx.In (
+    TxId (..),
+ )
+import Cardano.Ledger.Babbage.TxBody (
+    BabbageEraTxBody,
+ )
+import Cardano.Ledger.Shelley.UTxO (
+    UTxO (..),
+ )
+import Cardano.Ledger.State (
+    EraUTxO (..),
+ )
+import Cardano.Ledger.TxIn (
+    TxIn (..),
+ )
+import Cardano.Network.Protocol.NodeToClient (
+    GenTxId,
+    SerializedTransaction,
+    SubmitTransactionError,
+ )
+import Cardano.Slotting.EpochInfo (
+    EpochInfo,
+    hoistEpochInfo,
+ )
+import Cardano.Slotting.Time (
+    SystemStart,
+ )
+import Control.Arrow (
+    left,
+ )
+import Control.Monad.Trans.Except (
+    Except,
+ )
+import Ogmios.Data.EraTranslation (
+    MultiEraUTxO (..),
+    upgrade,
+ )
+import Ogmios.Data.Ledger (
+    ScriptPurposeIndexInAnyEra (..),
+ )
+import Ogmios.Data.Ledger.ScriptFailure (
+    EvaluateTransactionError (..),
+    NodeTipTooOldError (..),
+    TransactionScriptFailureInAnyEra (..),
+ )
+import Ouroboros.Consensus.Cardano.Block (
+    GenTx (..),
+ )
+import Ouroboros.Consensus.HardFork.History (
+    PastHorizonException,
+ )
+import Ouroboros.Consensus.Ledger.SupportsMempool (
+    HasTxId (..),
+ )
+import Ouroboros.Network.Protocol.LocalTxSubmission.Type (
+    SubmitResult (..),
+ )
 
 import qualified Cardano.Ledger.Alonzo.Core as Ledger
 import qualified Cardano.Ledger.Binary as Binary
@@ -165,33 +162,33 @@ import qualified Data.Map as Map
 --
 
 data TxSubmissionCodecs block = TxSubmissionCodecs
-    { decodeSubmitTransaction
-        :: ByteString
-        -> Maybe (Rpc.Request (SubmitTransaction block))
-    , encodeSubmitTransactionResponse
-        :: Rpc.Response (SubmitTransactionResponse block)
-        -> Json
-    , decodeEvaluateTransaction
-        :: ByteString
-        -> Maybe (Rpc.Request (EvaluateTransaction block))
-    , encodeEvaluateTransactionResponse
-        :: Rpc.Response (EvaluateTransactionResponse block)
-        -> Json
+    { decodeSubmitTransaction ::
+        ByteString ->
+        Maybe (Rpc.Request (SubmitTransaction block))
+    , encodeSubmitTransactionResponse ::
+        Rpc.Response (SubmitTransactionResponse block) ->
+        Json
+    , decodeEvaluateTransaction ::
+        ByteString ->
+        Maybe (Rpc.Request (EvaluateTransaction block))
+    , encodeEvaluateTransactionResponse ::
+        Rpc.Response (EvaluateTransactionResponse block) ->
+        Json
     }
 
-mkTxSubmissionCodecs
-    :: forall block.
-        ( FromJSON (MultiEraDecoder (SerializedTransaction block))
-        , FromJSON (MultiEraUTxO block)
-        )
-    => Rpc.Options
-    -> (GenTxId block -> Json)
-    -> (ScriptPurposeIndexInAnyEra -> Json)
-    -> (ExUnits -> Json)
-    -> (Rpc.EmbedFault -> EvaluateTransactionError -> Json)
-    -> (Rpc.EmbedFault -> SubmitTransactionError block -> Json)
-    -> (Rpc.EmbedFault -> [(SomeShelleyEra, Binary.DecoderError, Word)] -> Json)
-    -> TxSubmissionCodecs block
+mkTxSubmissionCodecs ::
+    forall block.
+    ( FromJSON (MultiEraDecoder (SerializedTransaction block))
+    , FromJSON (MultiEraUTxO block)
+    ) =>
+    Rpc.Options ->
+    (GenTxId block -> Json) ->
+    (ScriptPurposeIndexInAnyEra -> Json) ->
+    (ExUnits -> Json) ->
+    (Rpc.EmbedFault -> EvaluateTransactionError -> Json) ->
+    (Rpc.EmbedFault -> SubmitTransactionError block -> Json) ->
+    (Rpc.EmbedFault -> [(SomeShelleyEra, Binary.DecoderError, Word)] -> Json) ->
+    TxSubmissionCodecs block
 mkTxSubmissionCodecs
     opts
     encodeTxId
@@ -199,27 +196,28 @@ mkTxSubmissionCodecs
     encodeExUnits
     encodeEvaluationError
     encodeSubmitTransactionError
-    encodeDeserialisationFailure
-    =
-    TxSubmissionCodecs
-        { decodeSubmitTransaction =
-            decodeWith _decodeSubmitTransaction
-        , encodeSubmitTransactionResponse =
-            _encodeSubmitTransactionResponse (Proxy @block)
-                opts
-                encodeTxId
-                encodeSubmitTransactionError
-                encodeDeserialisationFailure
-        , decodeEvaluateTransaction =
-            decodeWith _decodeEvaluateTransaction
-        , encodeEvaluateTransactionResponse =
-            _encodeEvaluateTransactionResponse (Proxy @block)
-                opts
-                encodeScriptPurposeIndex
-                encodeExUnits
-                encodeEvaluationError
-                encodeDeserialisationFailure
-        }
+    encodeDeserialisationFailure =
+        TxSubmissionCodecs
+            { decodeSubmitTransaction =
+                decodeWith _decodeSubmitTransaction
+            , encodeSubmitTransactionResponse =
+                _encodeSubmitTransactionResponse
+                    (Proxy @block)
+                    opts
+                    encodeTxId
+                    encodeSubmitTransactionError
+                    encodeDeserialisationFailure
+            , decodeEvaluateTransaction =
+                decodeWith _decodeEvaluateTransaction
+            , encodeEvaluateTransactionResponse =
+                _encodeEvaluateTransactionResponse
+                    (Proxy @block)
+                    opts
+                    encodeScriptPurposeIndex
+                    encodeExUnits
+                    encodeEvaluationError
+                    encodeDeserialisationFailure
+            }
 
 --
 -- Messages
@@ -238,14 +236,14 @@ data TxSubmissionMessage block
 --
 
 data SubmitTransaction block
-    = SubmitTransaction { transaction :: MultiEraDecoder (SerializedTransaction block) }
+    = SubmitTransaction {transaction :: MultiEraDecoder (SerializedTransaction block)}
     deriving (Generic)
-deriving instance Show (SerializedTransaction block) => Show (SubmitTransaction block)
+deriving instance (Show (SerializedTransaction block)) => Show (SubmitTransaction block)
 
-_decodeSubmitTransaction
-    :: FromJSON (MultiEraDecoder (SerializedTransaction block))
-    => Json.Value
-    -> Json.Parser (Rpc.Request (SubmitTransaction block))
+_decodeSubmitTransaction ::
+    (FromJSON (MultiEraDecoder (SerializedTransaction block))) =>
+    Json.Value ->
+    Json.Parser (Rpc.Request (SubmitTransaction block))
 _decodeSubmitTransaction =
     Rpc.genericFromJSON Rpc.defaultOptions
 
@@ -258,48 +256,52 @@ data SubmitTransactionResponse block
 deriving instance
     ( Show (SubmitTransactionError block)
     , Show (GenTxId block)
-    ) => Show (SubmitTransactionResponse block)
+    ) =>
+    Show (SubmitTransactionResponse block)
 
+_encodeSubmitTransactionResponse ::
+    forall block.
+    () =>
+    Proxy block ->
+    Rpc.Options ->
+    (GenTxId block -> Json) ->
+    (Rpc.EmbedFault -> SubmitTransactionError block -> Json) ->
+    (Rpc.EmbedFault -> [(SomeShelleyEra, Binary.DecoderError, Word)] -> Json) ->
+    Rpc.Response (SubmitTransactionResponse block) ->
+    Json
 _encodeSubmitTransactionResponse
-    :: forall block. ()
-    => Proxy block
-    -> Rpc.Options
-    -> (GenTxId block -> Json)
-    -> (Rpc.EmbedFault -> SubmitTransactionError block -> Json)
-    -> (Rpc.EmbedFault -> [(SomeShelleyEra, Binary.DecoderError, Word)] -> Json)
-    -> Rpc.Response (SubmitTransactionResponse block)
-    -> Json
-_encodeSubmitTransactionResponse _proxy
+    _proxy
     opts
     encodeTransactionId
     encodeSubmitTransactionError
-    encodeDeserialisationFailure
-    =
-    Rpc.mkResponse opts $ \resolve reject -> \case
-        SubmitTransactionSuccess i ->
-            resolve $ encodeObject ("transaction" .= encodeTransactionId i)
-        SubmitTransactionFailure e ->
-            encodeSubmitTransactionError reject e
-        SubmitTransactionFailedToUpgrade hint ->
-            reject Rpc.FaultInvalidParams
-                "Non-upgradable transaction; it seems that you're trying to submit a \
-                \transaction in a format that presents incompatibility with the current \
-                \ledger era. The field \"data.hint\" contains possible useful information \
-                \about what went wrong."
-                (pure $ encodeObject
-                    ( "hint" .= encodeText hint
+    encodeDeserialisationFailure =
+        Rpc.mkResponse opts $ \resolve reject -> \case
+            SubmitTransactionSuccess i ->
+                resolve $ encodeObject ("transaction" .= encodeTransactionId i)
+            SubmitTransactionFailure e ->
+                encodeSubmitTransactionError reject e
+            SubmitTransactionFailedToUpgrade hint ->
+                reject
+                    Rpc.FaultInvalidParams
+                    "Non-upgradable transaction; it seems that you're trying to submit a \
+                    \transaction in a format that presents incompatibility with the current \
+                    \ledger era. The field \"data.hint\" contains possible useful information \
+                    \about what went wrong."
+                    ( pure
+                        $ encodeObject
+                            ("hint" .= encodeText hint)
                     )
-                )
-        SubmitTransactionDeserialisationFailure errs ->
-            encodeDeserialisationFailure reject errs
+            SubmitTransactionDeserialisationFailure errs ->
+                encodeDeserialisationFailure reject errs
 
--- | Translate an ouroboros-network's 'SubmitResult' into our own
--- 'SubmitTransactionResponse' which also carries a transaction id.
-mkSubmitTransactionResponse
-    :: HasTxId (SerializedTransaction block)
-    => SerializedTransaction block
-    -> SubmitResult (SubmitTransactionError block)
-    -> SubmitTransactionResponse block
+{- | Translate an ouroboros-network's 'SubmitResult' into our own
+'SubmitTransactionResponse' which also carries a transaction id.
+-}
+mkSubmitTransactionResponse ::
+    (HasTxId (SerializedTransaction block)) =>
+    SerializedTransaction block ->
+    SubmitResult (SubmitTransactionError block) ->
+    SubmitTransactionResponse block
 mkSubmitTransactionResponse tx = \case
     SubmitSuccess ->
         SubmitTransactionSuccess (txId tx)
@@ -312,30 +314,33 @@ mkSubmitTransactionResponse tx = \case
 
 data EvaluateTransaction block
     = EvaluateTransaction
-        { transaction :: MultiEraDecoder (SerializedTransaction block)
-        , additionalUtxo :: MultiEraUTxO block
-        }
+    { transaction :: MultiEraDecoder (SerializedTransaction block)
+    , additionalUtxo :: MultiEraUTxO block
+    }
     deriving (Generic)
 deriving instance
     ( Show (SerializedTransaction block)
     , Show (MultiEraUTxO block)
-    ) => Show (EvaluateTransaction block)
+    ) =>
+    Show (EvaluateTransaction block)
 
-_decodeEvaluateTransaction
-    :: forall block.
-        ( FromJSON (MultiEraDecoder (SerializedTransaction block))
-        , FromJSON (MultiEraUTxO block)
-        )
-    => Json.Value
-    -> Json.Parser (Rpc.Request (EvaluateTransaction block))
+_decodeEvaluateTransaction ::
+    forall block.
+    ( FromJSON (MultiEraDecoder (SerializedTransaction block))
+    , FromJSON (MultiEraUTxO block)
+    ) =>
+    Json.Value ->
+    Json.Parser (Rpc.Request (EvaluateTransaction block))
 _decodeEvaluateTransaction =
-    Rpc.genericFromJSON $ Rpc.defaultOptions
-        { Rpc.onMissingField = \fieldName ->
-            if fieldName == "additionalUtxo" then
-                pure (Json.Array mempty)
-            else
-                Rpc.onMissingField Rpc.defaultOptions fieldName
-        }
+    Rpc.genericFromJSON
+        $ Rpc.defaultOptions
+            { Rpc.onMissingField = \fieldName ->
+                if fieldName == "additionalUtxo"
+                    then
+                        pure (Json.Array mempty)
+                    else
+                        Rpc.onMissingField Rpc.defaultOptions fieldName
+            }
 
 data EvaluateTransactionResponse block
     = EvaluationFailure EvaluateTransactionError
@@ -357,88 +362,96 @@ incompatibleEra =
 -- | Shorthand constructor for 'EvaluateTransactionResponse'
 nodeTipTooOld :: Text -> EvaluateTransactionResponse block
 nodeTipTooOld currentNodeEra =
-    EvaluationFailure (NodeTipTooOldErr $
-        NodeTipTooOld { currentNodeEra, minimumRequiredEra }
-    )
+    EvaluationFailure
+        ( NodeTipTooOldErr
+            $ NodeTipTooOld{currentNodeEra, minimumRequiredEra}
+        )
   where
     minimumRequiredEra = "alonzo"
 
 -- TODO: Move those instances somewhere near other JSON instances.
+_encodeEvaluateTransactionResponse ::
+    forall block.
+    () =>
+    Proxy block ->
+    Rpc.Options ->
+    (ScriptPurposeIndexInAnyEra -> Json) ->
+    (ExUnits -> Json) ->
+    (Rpc.EmbedFault -> EvaluateTransactionError -> Json) ->
+    (Rpc.EmbedFault -> [(SomeShelleyEra, Binary.DecoderError, Word)] -> Json) ->
+    Rpc.Response (EvaluateTransactionResponse block) ->
+    Json
 _encodeEvaluateTransactionResponse
-    :: forall block. ()
-    => Proxy block
-    -> Rpc.Options
-    -> (ScriptPurposeIndexInAnyEra -> Json)
-    -> (ExUnits -> Json)
-    -> (Rpc.EmbedFault -> EvaluateTransactionError -> Json)
-    -> (Rpc.EmbedFault -> [(SomeShelleyEra, Binary.DecoderError, Word)] -> Json)
-    -> Rpc.Response (EvaluateTransactionResponse block)
-    -> Json
-_encodeEvaluateTransactionResponse _proxy
+    _proxy
     opts
     encodeRdmrPtr
     encodeExUnits
     encodeEvaluationError
-    encodeDeserialisationFailure
-    =
-    Rpc.mkResponse opts $ \resolve reject -> \case
-        EvaluationResult budgets ->
-            resolve $ encodeList identity $ Map.foldrWithKey
-                (\ptr result xs ->
-                    encodeObject
-                        ( "validator" .= encodeRdmrPtr ptr
-                       <> "budget" .= encodeExUnits result
-                        ) : xs
-                ) [] budgets
+    encodeDeserialisationFailure =
+        Rpc.mkResponse opts $ \resolve reject -> \case
+            EvaluationResult budgets ->
+                resolve
+                    $ encodeList identity
+                    $ Map.foldrWithKey
+                        ( \ptr result xs ->
+                            encodeObject
+                                ( "validator"
+                                    .= encodeRdmrPtr ptr
+                                    <> "budget"
+                                    .= encodeExUnits result
+                                )
+                                : xs
+                        )
+                        []
+                        budgets
+            EvaluateTransactionDeserialisationFailure errs ->
+                encodeDeserialisationFailure reject errs
+            EvaluationFailure e ->
+                encodeEvaluationError reject e
 
-        EvaluateTransactionDeserialisationFailure errs ->
-            encodeDeserialisationFailure reject errs
-
-        EvaluationFailure e ->
-            encodeEvaluationError reject e
-
--- | A constraint synonym to bundle together constraints needed to run a script
--- evaluation in any era after Alonzo (incl.).
+{- | A constraint synonym to bundle together constraints needed to run a script
+evaluation in any era after Alonzo (incl.).
+-}
 type CanEvaluateScriptsInEra era =
-      ( AlonzoEraTx era
-      , BabbageEraTxBody era
-      , EraPlutusContext era
-      , EraUTxO era
-      , ScriptsNeeded era ~ AlonzoScriptsNeeded era
-      , Script era ~ AlonzoScript era
-      , EraPlutusContext era
-      , IsAlonzoBasedEra era
-      )
+    ( AlonzoEraTx era
+    , BabbageEraTxBody era
+    , EraPlutusContext era
+    , EraUTxO era
+    , ScriptsNeeded era ~ AlonzoScriptsNeeded era
+    , Script era ~ AlonzoScript era
+    , EraPlutusContext era
+    , IsAlonzoBasedEra era
+    )
 
 -- | Evaluate script executions units for the given transaction.
-evaluateExecutionUnits
-    :: forall era block ix.
-      ( CanEvaluateScriptsInEra era
-      , ix ~ ScriptPurposeIndexInAnyEra
-      )
-    => Core.PParams era
-        -- ^ Protocol parameters
-    -> SystemStart
-        -- ^ Start of the blockchain, for converting slots to UTC times
-    -> EpochInfo (Except PastHorizonException)
-        -- ^ Information about epoch sizes, for converting slots to UTC times
-    -> UTxO era
-        -- ^ A UTXO needed to resolve inputs
-    -> Core.Tx era
-        -- ^ The actual transaction
-    -> EvaluateTransactionResponse block
+evaluateExecutionUnits ::
+    forall era block ix.
+    ( CanEvaluateScriptsInEra era
+    , ix ~ ScriptPurposeIndexInAnyEra
+    ) =>
+    -- | Protocol parameters
+    Core.PParams era ->
+    -- | Start of the blockchain, for converting slots to UTC times
+    SystemStart ->
+    -- | Information about epoch sizes, for converting slots to UTC times
+    EpochInfo (Except PastHorizonException) ->
+    -- | A UTXO needed to resolve inputs
+    UTxO era ->
+    -- | The actual transaction
+    Core.Tx Core.TopTx era ->
+    EvaluateTransactionResponse block
 evaluateExecutionUnits pparams systemStart epochInfo utxo tx =
     let (failures, successes) =
-            Map.foldrWithKey aggregateReports (mempty, mempty)  reports
+            Map.foldrWithKey aggregateReports (mempty, mempty) reports
      in if null failures
-        then EvaluationResult successes
-        else EvaluationFailure $ ScriptExecutionFailures failures
+            then EvaluationResult successes
+            else EvaluationFailure $ ScriptExecutionFailures failures
   where
-    aggregateReports
-        :: PlutusPurpose AsIx era
-        -> Either (TransactionScriptFailure era) ExUnits
-        -> (Map ix [TransactionScriptFailureInAnyEra], Map ix ExUnits)
-        -> (Map ix [TransactionScriptFailureInAnyEra], Map ix ExUnits)
+    aggregateReports ::
+        PlutusPurpose AsIx era ->
+        Either (TransactionScriptFailure era) ExUnits ->
+        (Map ix [TransactionScriptFailureInAnyEra], Map ix ExUnits) ->
+        (Map ix [TransactionScriptFailureInAnyEra], Map ix ExUnits)
     aggregateReports ptr result (failures, successes) =
         case result of
             Left scriptFailure ->
@@ -453,40 +466,40 @@ evaluateExecutionUnits pparams systemStart epochInfo utxo tx =
       where
         ix = ScriptPurposeIndexInAnyEra (alonzoBasedEra @era, ptr)
 
-    reports
-        :: Map
+    reports ::
+        Map
             (PlutusPurpose AsIx era)
             (Either (TransactionScriptFailure era) ExUnits)
     reports =
         evalTxExUnits
-          pparams
-          tx
-          utxo
-          (hoistEpochInfo (left show . runIdentity . runExceptT) epochInfo)
-          systemStart
+            pparams
+            tx
+            utxo
+            (hoistEpochInfo (left show . runIdentity . runExceptT) epochInfo)
+            systemStart
 
 --
 -- Reconstructing UTxO set from the mempool
 --
 
-utxoFromMempool
-    :: forall block crypto.
-        ( block ~ CardanoBlock crypto
-        )
-    => [GenTx block]
-    -> MultiEraUTxO block
+utxoFromMempool ::
+    forall block crypto.
+    (block ~ CardanoBlock crypto) =>
+    [GenTx block] ->
+    MultiEraUTxO block
 utxoFromMempool =
     go $ UTxOInBabbageEra mempty
   where
     go :: MultiEraUTxO block -> [GenTx block] -> MultiEraUTxO block
     go utxo = \case
         [] -> utxo
-        tx:txs -> go
-            (utxo
-                & withoutKeys (inputs tx)
-                & union (outputs tx)
-            )
-            txs
+        tx : txs ->
+            go
+                ( utxo
+                    & withoutKeys (inputs tx)
+                    & union (outputs tx)
+                )
+                txs
 
     withoutKeys :: Set TxIn -> MultiEraUTxO block -> MultiEraUTxO block
     withoutKeys ks = \case
@@ -494,6 +507,8 @@ utxoFromMempool =
             UTxOInBabbageEra (UTxO (Map.withoutKeys utxo ks))
         UTxOInConwayEra (UTxO utxo) ->
             UTxOInConwayEra (UTxO (Map.withoutKeys utxo ks))
+        UTxOInDijkstraEra (UTxO utxo) ->
+            UTxOInDijkstraEra (UTxO (Map.withoutKeys utxo ks))
 
     union :: MultiEraUTxO block -> MultiEraUTxO block -> MultiEraUTxO block
     union l r = case (l, r) of
@@ -505,13 +520,21 @@ utxoFromMempool =
             UTxOInConwayEra (UTxO (Map.union ul ur))
         (UTxOInConwayEra (UTxO ul), UTxOInConwayEra (UTxO ur)) ->
             UTxOInConwayEra (UTxO (Map.union ul ur))
+        (UTxOInDijkstraEra (UTxO ul), UTxOInDijkstraEra (UTxO ur)) ->
+            UTxOInDijkstraEra (UTxO (Map.union ul ur))
+        (_, UTxOInDijkstraEra (UTxO ur)) ->
+            UTxOInDijkstraEra (UTxO ur)
+        (UTxOInDijkstraEra (UTxO ul), _) ->
+            UTxOInDijkstraEra (UTxO ul)
 
     newUtxoFor :: TxId -> [out] -> Map TxIn out
     newUtxoFor h outs =
-        Map.fromList [ (TxIn h ix, out) | (out, ix) <- zip outs [minBound ..] ]
+        Map.fromList [(TxIn h ix, out) | (out, ix) <- zip outs [minBound ..]]
 
     inputs :: GenTx block -> Set TxIn
     inputs = \case
+        GenTxDijkstra (Consensus.ShelleyTx _ tx) ->
+            tx ^. Ledger.bodyTxL . Ledger.inputsTxBodyL
         GenTxConway (Consensus.ShelleyTx _ tx) ->
             tx ^. Ledger.bodyTxL . Ledger.inputsTxBodyL
         GenTxBabbage (Consensus.ShelleyTx _ tx) ->
@@ -529,6 +552,12 @@ utxoFromMempool =
 
     outputs :: GenTx block -> MultiEraUTxO block
     outputs = \case
+        GenTxDijkstra (Consensus.ShelleyTx h tx) ->
+            let
+                outs = tx ^. Ledger.bodyTxL . Ledger.outputsTxBodyL
+                utxo = newUtxoFor h (toList outs)
+             in
+                UTxOInDijkstraEra (UTxO utxo)
         GenTxConway (Consensus.ShelleyTx h tx) ->
             let
                 outs = tx ^. Ledger.bodyTxL . Ledger.outputsTxBodyL
@@ -552,7 +581,7 @@ utxoFromMempool =
         GenTxByron{} ->
             error "outputs: unsupported era."
 
-mergeUtxo ::  MultiEraUTxO block -> MultiEraUTxO block -> MultiEraUTxO block
+mergeUtxo :: MultiEraUTxO block -> MultiEraUTxO block -> MultiEraUTxO block
 mergeUtxo a b = case (a, b) of
     (UTxOInBabbageEra (unUTxO -> l), UTxOInBabbageEra (unUTxO -> r)) ->
         UTxOInBabbageEra $ UTxO (Map.union l r)
@@ -562,11 +591,19 @@ mergeUtxo a b = case (a, b) of
         UTxOInConwayEra $ UTxO (Map.union l (upgrade <$> r))
     (UTxOInConwayEra (unUTxO -> l), UTxOInConwayEra (unUTxO -> r)) ->
         UTxOInConwayEra $ UTxO (Map.union l r)
+    (UTxOInDijkstraEra (unUTxO -> l), UTxOInDijkstraEra (unUTxO -> r)) ->
+        UTxOInDijkstraEra $ UTxO (Map.union l r)
+    (_, UTxOInDijkstraEra (unUTxO -> r)) ->
+        UTxOInDijkstraEra $ UTxO r
+    (UTxOInDijkstraEra (unUTxO -> l), _) ->
+        UTxOInDijkstraEra $ UTxO l
 
 utxoReferences :: MultiEraUTxO (CardanoBlock crypto) -> [Text]
-utxoReferences = fmap txInToText . \case
-    UTxOInBabbageEra (unUTxO -> u) -> Map.keys u
-    UTxOInConwayEra  (unUTxO -> u) -> Map.keys u
+utxoReferences =
+    fmap txInToText . \case
+        UTxOInBabbageEra (unUTxO -> u) -> Map.keys u
+        UTxOInConwayEra (unUTxO -> u) -> Map.keys u
+        UTxOInDijkstraEra (unUTxO -> u) -> Map.keys u
   where
     txInToText (Ledger.TxIn txid (Ledger.TxIx ix)) =
         let (CC.UnsafeHash h) = Ledger.extractHash (Ledger.unTxId txid)

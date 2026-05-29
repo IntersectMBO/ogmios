@@ -2,13 +2,16 @@
 --  License, v. 2.0. If a copy of the MPL was not distributed with this
 --  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-
 module Ogmios.Data.Ledger.PredicateFailure.Shelley where
 
 import Ogmios.Prelude
 
+import Cardano.Ledger.Address
+    ( unWithdrawals
+    )
 import Cardano.Ledger.BaseTypes
     ( Mismatch (..)
+    , mismatchSupplied
     )
 import Cardano.Ledger.Core
     ( EraRule
@@ -28,6 +31,8 @@ import Ogmios.Data.Ledger.PredicateFailure
     )
 
 import qualified Cardano.Ledger.Shelley.Rules as Sh
+import qualified Data.Map.NonEmpty as NEMap
+import qualified Data.Set.NonEmpty as NESet
 
 encodeLedgerFailure
     :: Sh.ShelleyLedgerPredFailure ShelleyEra
@@ -37,6 +42,16 @@ encodeLedgerFailure = \case
         encodeUtxowFailure encodeUtxoFailure e
     Sh.DelegsFailure e ->
         encodeDelegsFailure e
+    Sh.ShelleyIncompleteWithdrawals ws ->
+        IncompleteWithdrawals
+            { withdrawals = mismatchSupplied <$> NEMap.toMap ws
+            }
+    -- TODO: both ledger failures currently fold into IncompleteWithdrawals;
+    -- introduce a dedicated WithdrawalsMissingAccounts variant.
+    Sh.ShelleyWithdrawalsMissingAccounts ws ->
+        IncompleteWithdrawals
+            { withdrawals = unWithdrawals ws
+            }
 
 encodeUtxowFailure
     :: forall era. ()
@@ -45,13 +60,13 @@ encodeUtxowFailure
     -> MultiEraPredicateFailure
 encodeUtxowFailure encodeUtxoFailure_ = \case
     Sh.InvalidWitnessesUTXOW wits ->
-        InvalidSignatures wits
+        InvalidSignatures (toList wits)
     Sh.MissingVKeyWitnessesUTXOW keys ->
-        MissingSignatures keys
+        MissingSignatures (NESet.toSet keys)
     Sh.MissingScriptWitnessesUTXOW scripts ->
-        MissingScriptWitnesses scripts
+        MissingScriptWitnesses (NESet.toSet scripts)
     Sh.ScriptWitnessNotValidatingUTXOW scripts ->
-        FailingScript scripts
+        FailingScript (NESet.toSet scripts)
     Sh.MIRInsufficientGenesisSigsUTXOW{} ->
         InvalidMIRTransfer
     Sh.MissingTxBodyMetadataHash hash ->
@@ -63,7 +78,7 @@ encodeUtxowFailure encodeUtxoFailure_ = \case
     Sh.InvalidMetadata ->
         InvalidMetadata
     Sh.ExtraneousScriptWitnessesUTXOW scripts ->
-        ExtraneousScriptWitnesses scripts
+        ExtraneousScriptWitnesses (NESet.toSet scripts)
     Sh.UtxoFailure e ->
         encodeUtxoFailure_ e
 
@@ -72,7 +87,7 @@ encodeUtxoFailure
     -> MultiEraPredicateFailure
 encodeUtxoFailure = \case
     Sh.BadInputsUTxO inputs ->
-        UnknownUtxoReference inputs
+        UnknownUtxoReference (NESet.toSet inputs)
     Sh.ExpiredUTxO (Mismatch timeToLive currentSlot) ->
         let validityInterval = ValidityInterval
                 { invalidBefore = SNothing
@@ -80,7 +95,10 @@ encodeUtxoFailure = \case
                 }
          in TransactionOutsideValidityInterval { validityInterval, currentSlot }
     Sh.MaxTxSizeUTxO (Mismatch measuredSize maximumSize) ->
-        TransactionTooLarge { measuredSize, maximumSize }
+        TransactionTooLarge
+            { measuredSize = toInteger measuredSize
+            , maximumSize = toInteger maximumSize
+            }
     Sh.InputSetEmptyUTxO ->
         EmptyInputSet
     Sh.FeeTooSmallUTxO (Mismatch suppliedFee minimumRequiredFee) ->
@@ -90,32 +108,30 @@ encodeUtxoFailure = \case
         let valueProduced = ValueInAnyEra (ShelleyBasedEraShelley, produced) in
         ValueNotConserved { valueConsumed, valueProduced }
     Sh.WrongNetwork expectedNetwork invalidAddrs ->
-        let invalidEntities = DiscriminatedAddresses invalidAddrs in
+        let invalidEntities = DiscriminatedAddresses (NESet.toSet invalidAddrs) in
         NetworkMismatch { expectedNetwork, invalidEntities }
     Sh.WrongNetworkWithdrawal expectedNetwork invalidAccts ->
-        let invalidEntities = DiscriminatedRewardAccounts invalidAccts in
+        let invalidEntities = DiscriminatedRewardAccounts (NESet.toSet invalidAccts) in
         NetworkMismatch { expectedNetwork, invalidEntities }
     Sh.OutputTooSmallUTxO outs ->
         let insufficientlyFundedOutputs =
-                (\out -> (TxOutInAnyEra (ShelleyBasedEraShelley, out), Nothing)) <$> outs
+                (\out -> (TxOutInAnyEra (ShelleyBasedEraShelley, out), Nothing)) <$> toList outs
          in InsufficientAdaInOutput { insufficientlyFundedOutputs }
     Sh.OutputBootAddrAttrsTooBig outs ->
-        let culpritOutputs = (\out -> TxOutInAnyEra (ShelleyBasedEraShelley, out)) <$> outs in
+        let culpritOutputs = (\out -> TxOutInAnyEra (ShelleyBasedEraShelley, out)) <$> toList outs in
         BootstrapAddressAttributesTooLarge { culpritOutputs }
     Sh.UpdateFailure{} ->
         InvalidProtocolParametersUpdate
 
 encodeDelegsFailure
-    :: PredicateFailure (EraRule "DELPL" era) ~ Sh.ShelleyDelplPredFailure era
-    => PredicateFailure (EraRule "POOL" era)  ~ Sh.ShelleyPoolPredFailure era
-    => PredicateFailure (EraRule "DELEG" era) ~ Sh.ShelleyDelegPredFailure era
+    :: forall era.
+        ( PredicateFailure (EraRule "POOL" era)  ~ Sh.ShelleyPoolPredFailure era
+        , PredicateFailure (EraRule "DELEG" era) ~ Sh.ShelleyDelegPredFailure era
+        , PredicateFailure (EraRule "DELPL" era) ~ Sh.ShelleyDelplPredFailure era
+        )
     => Sh.ShelleyDelegsPredFailure era
     -> MultiEraPredicateFailure
 encodeDelegsFailure = \case
-    Sh.DelegateeNotRegisteredDELEG poolId ->
-        UnknownStakePool poolId
-    Sh.WithdrawalsNotInRewardsDELEGS withdrawals ->
-        IncompleteWithdrawals withdrawals
     Sh.DelplFailure e ->
         encodeDeplFailure e
 
@@ -147,6 +163,11 @@ encodePoolFailure = \case
         NetworkMismatch { expectedNetwork, invalidEntities }
     Sh.PoolMedataHashTooBig poolId computedMetadataHashSize ->
         StakePoolMetadataHashTooLarge { poolId, computedMetadataHashSize }
+    -- TODO: VRF-key reuse across pool registrations isn't represented
+    -- distinctly in MultiEraPredicateFailure; fold into UnknownStakePool
+    -- referencing the conflicting poolId for now.
+    Sh.VRFKeyHashAlreadyRegistered poolId _vrfKeyHash ->
+        UnknownStakePool { poolId }
 
 encodeDelegFailure
     :: Sh.ShelleyDelegPredFailure era
@@ -178,6 +199,8 @@ encodeDelegFailure = \case
         InvalidMIRTransfer
     Sh.MIRProducesNegativeUpdate ->
         InvalidMIRTransfer
+    Sh.DelegateeNotRegisteredDELEG poolId ->
+        UnknownStakePool { poolId }
     Sh.MIRNegativeTransfer{} ->
         InvalidMIRTransfer
     Sh.WrongCertificateTypeDELEG ->

@@ -71,12 +71,14 @@ instance
         (inefficientEncodingToValue . encodeSubmitTransactionError (\_ _ -> fromMaybe (encodeObject mempty)))
 
 -- Only used for logging & health
-instance ToJSON (Tip (CardanoBlock crypto)) where
+-- TODO(dijkstra): overlaps with the generic `deriving newtype` instances
+-- now provided in Ouroboros.Network.Block for any block.
+instance {-# OVERLAPPING #-} ToJSON (Tip (CardanoBlock crypto)) where
     toJSON = inefficientEncodingToValue . encodeTip
     toEncoding = encodeTip
 
 -- Only used for logging & health
-instance ToJSON (Point (CardanoBlock crypto)) where
+instance {-# OVERLAPPING #-} ToJSON (Point (CardanoBlock crypto)) where
     toJSON = inefficientEncodingToValue . encodePoint
     toEncoding = encodePoint
 
@@ -91,10 +93,16 @@ instance FromJSON (MultiEraDecoder (GenTx (CardanoBlock StandardCrypto))) where
 instance FromJSON (MultiEraUTxO (CardanoBlock crypto)) where
     parseJSON = decodeUtxo
 
-instance FromJSON (Point (CardanoBlock crypto)) where
+-- TODO(dijkstra): ouroboros-network 1.1 introduced a generic
+-- `deriving newtype instance FromJSON ... => FromJSON (Point block)`
+-- in Ouroboros.Network.Block, which overlaps with this orphan.
+-- Same goes for Tip. OVERLAPPING keeps ours preferred at call sites
+-- that import this module; consider moving to a newtype wrapper to
+-- eliminate the overlap entirely.
+instance {-# OVERLAPPING #-} FromJSON (Point (CardanoBlock crypto)) where
     parseJSON = decodePoint
 
-instance FromJSON (Tip (CardanoBlock crypto)) where
+instance {-# OVERLAPPING #-} FromJSON (Tip (CardanoBlock crypto)) where
     parseJSON = decodeTip
 
 --
