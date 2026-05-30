@@ -182,8 +182,8 @@ cloning. The `?submodules=1` query is required so Nix's git fetcher pulls in
 # Build the default ogmios executable from the latest master
 nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1'
 
-# Specific tag or branch via ?ref=
-nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1&ref=v6.14.0.1#ogmios-musl'
+# Specific tag or branch via ?ref=refs/heads/<branch> or ?ref=refs/tags/<tag>
+nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1&ref=refs/tags/v6.14.0.1#ogmios-musl'
 ```
 
 ### Without Nix (`cabal` via `make shell`)
