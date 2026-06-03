@@ -15,7 +15,7 @@
 
 | Ogmios        | Cardano-node (mainnet, preview, preprod) |
 | ---           | ---                                      |
-| **`v6.14.0.1`** | **`11.0.1`**                           |
+| **`v6.14.0.2`** | **`11.0.1`**                           |
 | `v6.14.0`     | `10.5.1`                                 |
 | `v6.13.*`     | `10.1.2`, `10.1.3`, `10.1.4`             |
 | `v6.12.*`     | `10.1.2`, `10.1.3`, `10.1.4`             |
@@ -183,7 +183,7 @@ cloning. The `?submodules=1` query is required so Nix's git fetcher pulls in
 nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1'
 
 # Specific tag or branch via ?ref=refs/heads/<branch> or ?ref=refs/tags/<tag>
-nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1&ref=refs/tags/v6.14.0.1#ogmios-musl'
+nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1&ref=refs/tags/v6.14.0.2#ogmios-musl'
 ```
 
 ### Without Nix (`cabal` via `make shell`)
