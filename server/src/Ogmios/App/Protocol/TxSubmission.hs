@@ -345,22 +345,33 @@ newExecutionUnitsEvaluator tr = do
                         return $ Left (incompatibleEra "mary")
                     (_, GenTxAlonzo{}) ->
                         return $ Left (unsupportedEra "alonzo")
-                    (_, GenTxBabbage{}) -> 
-                        return $ Left (unsupportedEra "alonzo")
-                    (UTxOInBabbageEra{}, _) -> 
-                        return $ Left (unsupportedEra "babbage")
+                    (UTxOInBabbageEra utxo, GenTxBabbage (ShelleyTx _id tx)) -> do
+                        logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "babbage", transactionEra = "babbage" }
+                        return $ Right (SomeEvaluationInAnyEra utxo tx)
+                    (UTxOInBabbageEra utxo, GenTxConway (ShelleyTx _id tx)) -> do
+                        logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "babbage", transactionEra = "conway" }
+                        return $ Right (SomeEvaluationInAnyEra (upgrade utxo) tx)
+                    (UTxOInBabbageEra utxo, GenTxDijkstra (ShelleyTx _id tx)) -> do
+                        logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "babbage", transactionEra = "dijkstra" }
+                        return $ Right (SomeEvaluationInAnyEra (upgrade $ upgrade utxo) tx)
+                    (UTxOInConwayEra utxo, GenTxBabbage (ShelleyTx _id tx)) -> do
+                        logWith tr $ TxSubmissionEvaluateArguments { utxoEra = "conway", transactionEra = "babbage" }
+                        return $ Right (SomeEvaluationInAnyEra utxo (upgrade tx))
                     (UTxOInConwayEra utxo, GenTxConway (ShelleyTx _id tx)) -> do
                         logWith tr $ TxSubmissionEvaluateArguments{utxoEra = "conway", transactionEra = "conway"}
                         return $ Right (SomeEvaluationInAnyEra utxo tx)
                     (UTxOInConwayEra utxo, GenTxDijkstra (ShelleyTx _id tx)) -> do
                         logWith tr $ TxSubmissionEvaluateArguments{utxoEra = "conway", transactionEra = "dijkstra"}
                         return $ Right (SomeEvaluationInAnyEra (upgrade utxo) tx)
-                    (UTxOInDijkstraEra utxo, GenTxDijkstra (ShelleyTx _id tx)) -> do
-                        logWith tr (TxSubmissionEvaluateArguments{utxoEra = "dijkstra", transactionEra = "dijkstra"})
-                        return $ Right (SomeEvaluationInAnyEra utxo tx)
+                    (UTxOInDijkstraEra utxo, GenTxBabbage (ShelleyTx _id tx)) -> do
+                        logWith tr (TxSubmissionEvaluateArguments{utxoEra = "dijkstra", transactionEra = "babbage"})
+                        return $ Right (SomeEvaluationInAnyEra utxo (upgrade $ upgrade tx))
                     (UTxOInDijkstraEra utxo, GenTxConway (ShelleyTx _id tx)) -> do
                         logWith tr (TxSubmissionEvaluateArguments{utxoEra = "dijkstra", transactionEra = "conway"})
                         return $ Right (SomeEvaluationInAnyEra utxo (upgrade tx))
+                    (UTxOInDijkstraEra utxo, GenTxDijkstra (ShelleyTx _id tx)) -> do
+                          logWith tr (TxSubmissionEvaluateArguments{utxoEra = "dijkstra", transactionEra = "dijkstra"})
+                          return $ Right (SomeEvaluationInAnyEra utxo tx)
             , readMempoolM = do
                 logWith tr TxSubmissionLocalMempoolTryRead
                 txs <- atomically $ do
@@ -699,6 +710,7 @@ translateToNetworkEra (SomeEvaluationInAnyEra utxoOrig txOrig) =
         let
             eraNetwork  = typeRep @eraNetwork
             eraArgs     = typeRep @eraArgs
+            eraBabbage  = typeRep @BabbageEra
             eraConway   = typeRep @ConwayEra
             eraDijkstra = typeRep @DijkstraEra
 
@@ -709,6 +721,13 @@ translateToNetworkEra (SomeEvaluationInAnyEra utxoOrig txOrig) =
                     _ ->
                         Nothing
 
+            babbageToConway =
+                case (testEquality eraNetwork eraConway, testEquality eraArgs eraBabbage) of
+                    (Just Refl, Just Refl) ->
+                        Just (upgrade utxo, upgrade tx)
+                    _ ->
+                        Nothing
+
             conwayToDijkstra =
                 case (testEquality eraNetwork eraDijkstra, testEquality eraArgs eraConway) of
                     (Just Refl, Just Refl) ->
@@ -716,7 +735,7 @@ translateToNetworkEra (SomeEvaluationInAnyEra utxoOrig txOrig) =
                     _ ->
                         Nothing
          in
-            sameEra <|> conwayToDijkstra
+            sameEra <|> babbageToConway <|> conwayToDijkstra
 
 --
 -- Logs
