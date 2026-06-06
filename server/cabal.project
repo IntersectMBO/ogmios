@@ -46,6 +46,7 @@ packages:
   modules/hjsonschema
   modules/hspec-json-schema
   modules/json-rpc
+  test/integration
 
 tests: False
 

@@ -14,6 +14,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.hackage.follows = "hackageNix";
     };
+    cardano-node.url = "github:IntersectMBO/cardano-node/11.0.1";
     iohkNix.url = "github:input-output-hk/iohk-nix";
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     self.submodules = true;
@@ -27,7 +28,7 @@
       systems = [
         "x86_64-linux"
         # "aarch64-linux"
-        # "aarch64-darwin"
+        "aarch64-darwin"
       ];
       perSystem = {system, ...}: {
         _module.args.pkgs = import inputs.nixpkgs {
