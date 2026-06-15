@@ -59,6 +59,7 @@ import Cardano.Ledger.HKD (
 
 import qualified Cardano.Ledger.HKD as Ledger
 
+import qualified Cardano.Ledger.Allegra.Scripts as Al
 import qualified Cardano.Ledger.Alonzo.Plutus.TxInfo as Al
 import qualified Cardano.Ledger.Alonzo.Scripts as Al
 import qualified Cardano.Ledger.Api as Ledger
@@ -217,7 +218,10 @@ encodeSharedTxBody opts x scripts =
             (encodeFoldable (encodeObject . Shelley.encodeTxIn))
             (x ^. Ledger.referenceInputsTxBodyL)
         <> "outputs"
-        .= encodeFoldable (encodeObject . encodeTxOut opts) (x ^. Ledger.outputsTxBodyL)
+        .=? OmitWhen
+            null
+            (encodeFoldable (encodeObject . encodeTxOut opts))
+            (x ^. Ledger.outputsTxBodyL)
         <> "certificates"
         .=? OmitWhen
             null
@@ -267,7 +271,10 @@ encodeSharedTxBody opts x scripts =
             Alonzo.encodeScriptIntegrityHash
             (x ^. Ledger.scriptIntegrityHashTxBodyL)
         <> "validityInterval"
-        .= Allegra.encodeValidityInterval (x ^. Ledger.vldtTxBodyL)
+        .=? OmitWhen
+            (\it -> isSNothing (Al.invalidBefore it) && isSNothing (Al.invalidHereafter it))
+            Allegra.encodeValidityInterval
+            (x ^. Ledger.vldtTxBodyL)
         <> "proposals"
         .=? OmitWhen
             null
