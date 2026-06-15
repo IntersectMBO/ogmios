@@ -7,3 +7,6 @@ docs/static/typescript/api
 /result-*
 
 /.direnv
+
+## Claude Code (symlink created by the devShell shellHook)
+/.claude
