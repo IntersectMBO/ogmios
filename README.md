@@ -34,6 +34,8 @@ brew tap CardanoSolutions/formulas
 brew install ogmios
 ```
 
+Or pull a pre-built, multi-arch (`linux/amd64`, `linux/arm64`) container image from GHCR: `ghcr.io/intersectmbo/ogmios` (standalone) or `ghcr.io/intersectmbo/cardano-node-ogmios` (cardano-node + Ogmios).
+
 See our [Ogmios client starter kit](https://github.com/CardanoSolutions/ogmios-ts-client-starter-kit#ogmios-client-starter-kit) or jump right into the [user manual](https://ogmios.dev).
 
 ## Features
