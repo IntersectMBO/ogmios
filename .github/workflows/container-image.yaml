@@ -77,44 +77,53 @@ jobs:
           substituters = https://cache.iog.io/ https://cache.nixos.org/
 
     # Temporary: poll the Nix cache directly until Hydra check-run reporting
-    # is fixed.
+    # is fixed. Both architectures are built by Hydra; wait for each.
     - name: Wait for ogmios-musl in Hydra cache
       run: |
         set -o pipefail
         echo "Target SHA: $TARGET_SHA"
         flake_ref="git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1"
-        if ! out=$(nix eval --raw "$flake_ref#packages.x86_64-linux.ogmios-musl"); then
-          echo "nix eval failed"
-          exit 1
-        fi
-        if [ -z "$out" ]; then
-          echo "nix eval returned an empty path"
-          exit 1
-        fi
-        drv=$(nix eval --raw "$flake_ref#packages.x86_64-linux.ogmios-musl.drvPath" 2>/dev/null || true)
-        echo "Resolved store path: $out"
-        echo "Derivation path:     $drv"
-        echo "Waiting for $out in cache..."
         deadline=$((SECONDS + 1800))
-        while true; do
-          if nix path-info --refresh --store https://cache.iog.io "$out" >/dev/null 2>&1; then
-            echo "Found in cache"
-            break
-          fi
-          if [ "$SECONDS" -ge "$deadline" ]; then
-            echo "Timed out after 30 minutes waiting for Hydra cache (path: $out)"
+        for sys in x86_64-linux aarch64-linux; do
+          if ! out=$(nix eval --raw "$flake_ref#packages.$sys.ogmios-musl"); then
+            echo "nix eval failed for $sys"
             exit 1
           fi
-          echo "Not in cache yet, waiting 30s..."
-          sleep 30
+          if [ -z "$out" ]; then
+            echo "nix eval returned an empty path for $sys"
+            exit 1
+          fi
+          echo "[$sys] resolved store path: $out"
+          echo "[$sys] waiting for $out in cache..."
+          while true; do
+            if nix path-info --refresh --store https://cache.iog.io "$out" >/dev/null 2>&1; then
+              echo "[$sys] found in cache"
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "Timed out after 30 minutes waiting for Hydra cache ($sys path: $out)"
+              exit 1
+            fi
+            echo "[$sys] not in cache yet, waiting 30s..."
+            sleep 30
+          done
         done
 
-    - name: Download ogmios binary from Hydra cache
+    # Place each architecture's static binary at the path the Dockerfile's
+    # `COPY ./server/bin/ogmios-${TARGETARCH}` expects (amd64 / arm64).
+    - name: Download ogmios binaries from Hydra cache
       run: |
         flake_ref="git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1"
-        nix build --builders "" --max-jobs 0 "$flake_ref#packages.x86_64-linux.ogmios-musl"
         mkdir -p server/bin
-        cp result/bin/ogmios server/bin/ogmios
+        for pair in "x86_64-linux:amd64" "aarch64-linux:arm64"; do
+          sys="${pair%%:*}"
+          arch="${pair##*:}"
+          nix build --builders "" --max-jobs 0 "$flake_ref#packages.$sys.ogmios-musl" -o "result-$arch"
+          cp "result-$arch/bin/ogmios" "server/bin/ogmios-$arch"
+        done
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
     - name: Set up Buildx
       uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
@@ -129,6 +138,15 @@ jobs:
     # cardano-node-ogmios version tags embed the bundled cardano-node version,
     # e.g. 'v6.14.0_11.0.1-mainnet', matching the upstream CardanoSolutions tag
     # scheme. The un-suffixed tags ('latest', 'v6.14.0_11.0.1') alias mainnet.
+    #
+    # Each architecture is built and pushed on its own as '<base>-amd64' /
+    # '<base>-arm64' (so the single-arch images are tagged from the start, never
+    # left as orphaned 'sha256:...' versions), then the multi-arch manifest lists
+    # are composed from those per-arch digests in a later step.
+    #
+    # Per build unit we emit:
+    #   <unit>-base  the canonical tag the per-arch builds attach '-<arch>' to
+    #   <unit>       a space-separated list of every final multi-arch tag
     - name: Compute image tags
       id: tags
       run: |
@@ -147,15 +165,22 @@ jobs:
           exit 1
         fi
         ver="${version}_${node_version}"
-        image="$repository/cardano-node-ogmios"
+        ogmios="$repository/ogmios"
+        cno="$repository/cardano-node-ogmios"
         {
-          echo "ogmios=$repository/ogmios:$version,$repository/ogmios:latest"
-          echo "cardano-node-ogmios-mainnet=$image:$ver-mainnet,$image:latest-mainnet,$image:$ver,$image:latest"
-          echo "cardano-node-ogmios-preprod=$image:$ver-preprod,$image:latest-preprod"
-          echo "cardano-node-ogmios-preview=$image:$ver-preview,$image:latest-preview"
+          echo "ogmios-base=$ogmios:$version"
+          echo "ogmios=$ogmios:$version $ogmios:latest"
+          echo "cardano-node-ogmios-mainnet-base=$cno:$ver-mainnet"
+          echo "cardano-node-ogmios-mainnet=$cno:$ver-mainnet $cno:latest-mainnet $cno:$ver $cno:latest"
+          echo "cardano-node-ogmios-preprod-base=$cno:$ver-preprod"
+          echo "cardano-node-ogmios-preprod=$cno:$ver-preprod $cno:latest-preprod"
+          echo "cardano-node-ogmios-preview-base=$cno:$ver-preview"
+          echo "cardano-node-ogmios-preview=$cno:$ver-preview $cno:latest-preview"
         } >> "$GITHUB_OUTPUT"
 
-    - name: Build and push ogmios
+    # --- Per-architecture builds: each pushes a single '<base>-<arch>' tag. ---
+
+    - name: Build and push ogmios (amd64)
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
       with:
         context: .
@@ -163,9 +188,19 @@ jobs:
         platforms: linux/amd64
         provenance: false
         push: true
-        tags: ${{ steps.tags.outputs.ogmios }}
+        tags: ${{ steps.tags.outputs.ogmios-base }}-amd64
 
-    - name: Build and push cardano-node-ogmios (mainnet)
+    - name: Build and push ogmios (arm64)
+      uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+      with:
+        context: .
+        target: ogmios
+        platforms: linux/arm64
+        provenance: false
+        push: true
+        tags: ${{ steps.tags.outputs.ogmios-base }}-arm64
+
+    - name: Build and push cardano-node-ogmios (mainnet, amd64)
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
       with:
         context: .
@@ -174,9 +209,20 @@ jobs:
         platforms: linux/amd64
         provenance: false
         push: true
-        tags: ${{ steps.tags.outputs.cardano-node-ogmios-mainnet }}
+        tags: ${{ steps.tags.outputs.cardano-node-ogmios-mainnet-base }}-amd64
 
-    - name: Build and push cardano-node-ogmios (preprod)
+    - name: Build and push cardano-node-ogmios (mainnet, arm64)
+      uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+      with:
+        context: .
+        target: cardano-node-ogmios
+        build-args: NETWORK=mainnet
+        platforms: linux/arm64
+        provenance: false
+        push: true
+        tags: ${{ steps.tags.outputs.cardano-node-ogmios-mainnet-base }}-arm64
+
+    - name: Build and push cardano-node-ogmios (preprod, amd64)
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
       with:
         context: .
@@ -185,9 +231,20 @@ jobs:
         platforms: linux/amd64
         provenance: false
         push: true
-        tags: ${{ steps.tags.outputs.cardano-node-ogmios-preprod }}
+        tags: ${{ steps.tags.outputs.cardano-node-ogmios-preprod-base }}-amd64
 
-    - name: Build and push cardano-node-ogmios (preview)
+    - name: Build and push cardano-node-ogmios (preprod, arm64)
+      uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+      with:
+        context: .
+        target: cardano-node-ogmios
+        build-args: NETWORK=preprod
+        platforms: linux/arm64
+        provenance: false
+        push: true
+        tags: ${{ steps.tags.outputs.cardano-node-ogmios-preprod-base }}-arm64
+
+    - name: Build and push cardano-node-ogmios (preview, amd64)
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
       with:
         context: .
@@ -196,4 +253,37 @@ jobs:
         platforms: linux/amd64
         provenance: false
         push: true
-        tags: ${{ steps.tags.outputs.cardano-node-ogmios-preview }}
+        tags: ${{ steps.tags.outputs.cardano-node-ogmios-preview-base }}-amd64
+
+    - name: Build and push cardano-node-ogmios (preview, arm64)
+      uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+      with:
+        context: .
+        target: cardano-node-ogmios
+        build-args: NETWORK=preview
+        platforms: linux/arm64
+        provenance: false
+        push: true
+        tags: ${{ steps.tags.outputs.cardano-node-ogmios-preview-base }}-arm64
+
+    # --- Compose multi-arch manifest lists from the per-arch images. ---
+    # For each build unit, every final tag becomes a manifest list pointing at
+    # the two already-tagged '<base>-amd64' / '<base>-arm64' images by digest.
+    # No new single-arch manifests are created, so nothing is left untagged.
+    - name: Compose multi-arch manifests
+      run: |
+        set -euo pipefail
+        compose() {
+          local base="$1"; shift
+          local repo amd64 arm64
+          repo="${base%:*}"
+          amd64=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$base-amd64" | jq -er .digest)
+          arm64=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$base-arm64" | jq -er .digest)
+          for tag in "$@"; do
+            docker buildx imagetools create -t "$tag" "$repo@$amd64" "$repo@$arm64"
+          done
+        }
+        compose '${{ steps.tags.outputs.ogmios-base }}' ${{ steps.tags.outputs.ogmios }}
+        compose '${{ steps.tags.outputs.cardano-node-ogmios-mainnet-base }}' ${{ steps.tags.outputs.cardano-node-ogmios-mainnet }}
+        compose '${{ steps.tags.outputs.cardano-node-ogmios-preprod-base }}' ${{ steps.tags.outputs.cardano-node-ogmios-preprod }}
+        compose '${{ steps.tags.outputs.cardano-node-ogmios-preview-base }}' ${{ steps.tags.outputs.cardano-node-ogmios-preview }}
