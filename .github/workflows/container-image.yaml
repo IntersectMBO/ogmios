@@ -126,8 +126,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    # The un-suffixed cardano-node-ogmios tags (e.g. 'latest', '6.14.0')
-    # alias the mainnet image.
+    # cardano-node-ogmios version tags embed the bundled cardano-node version,
+    # e.g. 'v6.14.0_11.0.1-mainnet', matching the upstream CardanoSolutions tag
+    # scheme. The un-suffixed tags ('latest', 'v6.14.0_11.0.1') alias mainnet.
     - name: Compute image tags
       id: tags
       run: |
@@ -137,12 +138,21 @@ jobs:
           echo "::error::Cannot derive a valid image tag from git tag '$GITHUB_REF_NAME' (got '$version')."
           exit 1
         fi
+        # Single source of truth for the bundled node version: the Dockerfile's
+        # CARDANO_NODE_IMAGE default (the build does not override that arg).
+        node_image="$(sed -n 's/^ARG CARDANO_NODE_IMAGE=//p' Dockerfile | head -n1)"
+        node_version="${node_image##*:}"
+        if ! [[ "$node_version" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+          echo "::error::Could not parse a valid cardano-node version from Dockerfile (got '$node_version')."
+          exit 1
+        fi
+        ver="${version}_${node_version}"
         image="$repository/cardano-node-ogmios"
         {
           echo "ogmios=$repository/ogmios:$version,$repository/ogmios:latest"
-          echo "cardano-node-ogmios-mainnet=$image:$version-mainnet,$image:latest-mainnet,$image:$version,$image:latest"
-          echo "cardano-node-ogmios-preprod=$image:$version-preprod,$image:latest-preprod"
-          echo "cardano-node-ogmios-preview=$image:$version-preview,$image:latest-preview"
+          echo "cardano-node-ogmios-mainnet=$image:$ver-mainnet,$image:latest-mainnet,$image:$ver,$image:latest"
+          echo "cardano-node-ogmios-preprod=$image:$ver-preprod,$image:latest-preprod"
+          echo "cardano-node-ogmios-preview=$image:$ver-preview,$image:latest-preview"
         } >> "$GITHUB_OUTPUT"
 
     - name: Build and push ogmios
