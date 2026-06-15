@@ -96,7 +96,13 @@ jobs:
     - name: Build
       run: |
         flake_ref="git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1"
-        version="${GITHUB_REF_NAME//[^a-zA-Z0-9._-]/}"
+        # Replace any run of characters invalid in a tag with a single '-'
+        # (deleting them could collapse distinct refs), then trim separators.
+        version=$(printf '%s' "$GITHUB_REF_NAME" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^[-.]+//; s/[-.]+$//')
+        if ! [[ "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+          echo "::error::Cannot derive a valid release version from git tag '$GITHUB_REF_NAME' (got '$version')."
+          exit 1
+        fi
         # Release assets are named after the nix system (x86_64-linux /
         # aarch64-linux), matching the upstream CardanoSolutions convention.
         for sys in x86_64-linux aarch64-linux; do
