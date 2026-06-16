@@ -15,7 +15,7 @@
 
 | Ogmios        | Cardano-node (mainnet, preview, preprod) |
 | ---           | ---                                      |
-| **`v6.14.0.2`** | **`11.0.1`**                           |
+| **`v6.14.0.3`** | **`11.0.1`**                           |
 | `v6.14.0`     | `10.5.1`                                 |
 | `v6.13.*`     | `10.1.2`, `10.1.3`, `10.1.4`             |
 | `v6.12.*`     | `10.1.2`, `10.1.3`, `10.1.4`             |
@@ -33,6 +33,8 @@ Using [Homebrew](https://brew.sh/):
 brew tap CardanoSolutions/formulas
 brew install ogmios
 ```
+
+Or pull a pre-built, multi-arch (`linux/amd64`, `linux/arm64`) container image from GHCR: `ghcr.io/intersectmbo/ogmios` (standalone) or `ghcr.io/intersectmbo/cardano-node-ogmios` (cardano-node + Ogmios).
 
 See our [Ogmios client starter kit](https://github.com/CardanoSolutions/ogmios-ts-client-starter-kit#ogmios-client-starter-kit) or jump right into the [user manual](https://ogmios.dev).
 
@@ -183,7 +185,7 @@ cloning. The `?submodules=1` query is required so Nix's git fetcher pulls in
 nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1'
 
 # Specific tag or branch via ?ref=refs/heads/<branch> or ?ref=refs/tags/<tag>
-nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1&ref=refs/tags/v6.14.0.2#ogmios-musl'
+nix build -Lv 'git+https://github.com/IntersectMBO/ogmios.git?submodules=1&ref=refs/tags/v6.14.0.3#ogmios-musl'
 ```
 
 ### Without Nix (`cabal` via `make shell`)
