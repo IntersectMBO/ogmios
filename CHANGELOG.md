@@ -68,6 +68,8 @@ math: true
 
 - `evaluateTransaction` now reads scripts with `"language": "plutus:v4"` in `additionalUtxo`. Before, it refused them.
 
+- `evaluateTransaction` now uses the outputs given in `additionalUtxo` over the outputs that transactions in the mempool create, when both have the same output reference. Before, the mempool outputs won.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added
