@@ -70,6 +70,8 @@ math: true
 
 - `evaluateTransaction` now uses the outputs given in `additionalUtxo` over the outputs that transactions in the mempool create, when both have the same output reference. Before, the mempool outputs won.
 
+- `queryNetwork/genesisConfiguration` for the Conway era now returns `plutusCostModels` (the Plutus V3 cost model) and `minFeeReferenceScripts` in `updatableParameters`. Before, both were missing.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added
