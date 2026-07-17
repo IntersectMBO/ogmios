@@ -9,9 +9,10 @@ module Test.Integration.Env
   ) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (SomeException, bracket, try)
-import Control.Monad (filterM)
+import Control.Exception (SomeException, bracket, bracketOnError, try)
+import Control.Monad (filterM, void)
 import Data.Foldable (toList)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Maybe (catMaybes, listToMaybe)
 import Network.Socket
     ( AddrInfo(..)
@@ -31,7 +32,7 @@ import System.Directory
     )
 import System.Environment (getEnvironment)
 import System.FilePath ((</>), takeFileName)
-import System.IO (Handle, IOMode(..), hClose, openFile)
+import System.IO (Handle, IOMode(..), hClose, openFile, withFile)
 import System.IO.Temp (createTempDirectory, getCanonicalTemporaryDirectory)
 import System.Exit (ExitCode(..))
 import System.Process
@@ -42,6 +43,7 @@ import System.Process
     , proc
     , terminateProcess
     , waitForProcess
+    , withCreateProcess
     )
 import Test.Tasty (TestTree, withResource)
 
@@ -72,8 +74,14 @@ withTestEnv f = withResource setup' teardown' (f . fmap fst)
     setup' = setup
     teardown' (_, managed) = teardown managed
 
+-- withResource only runs teardown when setup returns, so everything
+-- spawned here is also registered in a cleanup stack that bracketOnError
+-- unwinds (newest first) if a later step of setup throws; once setup
+-- returns, teardown owns cleanup.
 setup :: IO (TestEnv, ManagedState)
-setup = do
+setup = bracketOnError (newIORef []) rollback $ \cleanups -> do
+  let track action = modifyIORef' cleanups (action :)
+
   tmpBase <- getCanonicalTemporaryDirectory
   workDir <- createTempDirectory tmpBase "ogmios-integration"
   let logsDir    = workDir </> "logs"
@@ -87,7 +95,9 @@ setup = do
 
   -- Start cardano-testnet
   testnetStdout <- openFile (logsDir </> "cardano-testnet.stdout") WriteMode
+  track (hClose testnetStdout)
   testnetStderr <- openFile (logsDir </> "cardano-testnet.stderr") WriteMode
+  track (hClose testnetStderr)
   (_, _, _, testnetPh) <- createProcess
     (proc "cardano-testnet"
       [ "cardano"
@@ -98,6 +108,7 @@ setup = do
     , std_out = UseHandle testnetStdout
     , std_err = UseHandle testnetStderr
     }
+  track (terminateProcess testnetPh >> void (waitForProcess testnetPh))
 
   putStrLn "[integration] waiting for cardano-testnet node socket..."
   socketPath <- waitForFile testnetDir ["sock"] 120
@@ -108,7 +119,9 @@ setup = do
 
   -- Start ogmios
   ogmiosStdout <- openFile (logsDir </> "ogmios.stdout") WriteMode
+  track (hClose ogmiosStdout)
   ogmiosStderr <- openFile (logsDir </> "ogmios.stderr") WriteMode
+  track (hClose ogmiosStderr)
   (_, _, _, ogmiosPh) <- createProcess
     (proc "ogmios"
       [ "--node-socket", socketPath
@@ -119,6 +132,7 @@ setup = do
     { std_out = UseHandle ogmiosStdout
     , std_err = UseHandle ogmiosStderr
     }
+  track (terminateProcess ogmiosPh >> void (waitForProcess ogmiosPh))
 
   putStrLn "[integration] waiting for ogmios..."
   waitForTcpPort ogmiosPort 60
@@ -141,6 +155,9 @@ setup = do
         , msWorkDir    = workDir
         }
   pure (testEnv, managed)
+  where
+    rollback :: IORef [IO ()] -> IO ()
+    rollback cleanups = readIORef cleanups >>= sequence_
 
 teardown :: ManagedState -> IO ()
 teardown ms = do
@@ -241,20 +258,19 @@ runTxGenerator workDir logsDir testnetDir = do
     , "}"
     ]
   putStrLn "[integration] running tx-generator..."
-  txgenStdout <- openFile (logsDir </> "tx-generator.stdout") WriteMode
-  txgenStderr <- openFile (logsDir </> "tx-generator.stderr") WriteMode
-  (_, _, _, ph) <- createProcess
-    (proc "tx-generator"
-      [ "json_highlevel", configFile
-      , "--testnet-config-dir", testnetDir
-      ])
-    { cwd = Just workDir
-    , std_out = UseHandle txgenStdout
-    , std_err = UseHandle txgenStderr
-    }
-  exitCode <- waitForProcess ph
-  hClose txgenStdout
-  hClose txgenStderr
+  exitCode <-
+    withFile (logsDir </> "tx-generator.stdout") WriteMode $ \txgenStdout ->
+    withFile (logsDir </> "tx-generator.stderr") WriteMode $ \txgenStderr ->
+      withCreateProcess
+        (proc "tx-generator"
+          [ "json_highlevel", configFile
+          , "--testnet-config-dir", testnetDir
+          ])
+        { cwd = Just workDir
+        , std_out = UseHandle txgenStdout
+        , std_err = UseHandle txgenStderr
+        }
+        $ \_ _ _ ph -> waitForProcess ph
   case exitCode of
     ExitSuccess   -> putStrLn "[integration] tx-generator finished."
     ExitFailure c -> fail $ "tx-generator exited with code " <> show c
