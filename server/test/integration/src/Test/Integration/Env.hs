@@ -9,7 +9,7 @@ module Test.Integration.Env
   ) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, bracket, try)
 import Control.Monad (filterM)
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes, listToMaybe)
@@ -269,9 +269,7 @@ waitForTcpPort port maxSeconds = go maxSeconds
       result <- try @SomeException $ do
         let hints = defaultHints { addrSocketType = Stream }
         addr:_ <- getAddrInfo (Just hints) (Just "127.0.0.1") (Just (show port))
-        sock <- openSocket addr
-        connect sock (addrAddress addr)
-        close sock
+        bracket (openSocket addr) close (\sock -> connect sock (addrAddress addr))
       case result of
         Right () -> pure ()
         Left _   -> threadDelay 1000000 >> go (n - 1)
