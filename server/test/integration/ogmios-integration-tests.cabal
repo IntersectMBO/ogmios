@@ -19,6 +19,7 @@ executable ogmios-integration-tests
     Test.Integration.LiveStakeDistribution
     Test.Integration.NetworkTip
     Test.Integration.ProtocolParameters
+    Test.Integration.Query
     Test.Integration.RewardAccountSummaries
     Test.Integration.StakePools
     Test.Integration.Utxo

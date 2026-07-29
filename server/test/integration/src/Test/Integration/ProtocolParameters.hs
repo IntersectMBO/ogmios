@@ -5,42 +5,22 @@ module Test.Integration.ProtocolParameters
   ( protocolParametersTests
   ) where
 
-import Data.Aeson
-    ( Value(..)
-    , (.:)
-    , eitherDecode
-    , encode
-    , object
-    , (.=)
-    )
+import Data.Aeson (Value, (.:))
 import Data.Aeson.Key (Key)
-import Data.Aeson.Types (parseEither, withObject)
-import Data.Text (Text)
-import System.FilePath ((</>))
-import System.Process (callProcess)
+import Data.Aeson.Types (withObject)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
+import Test.Tasty.HUnit (assertEqual, testCase)
 
-import qualified Data.Aeson.KeyMap as KM
-import qualified Data.ByteString.Lazy as LBS
-import qualified Network.WebSockets as WS
-
-import Test.Integration.Env (TestEnv(..), queryOgmiosRetry)
+import Test.Integration.Env (TestEnv)
+import Test.Integration.Query (parseIO, queryCli, queryOgmios)
 
 protocolParametersTests :: IO TestEnv -> TestTree
 protocolParametersTests getEnv = testGroup "ProtocolParameters"
   [ testCase "protocolParameters match cardano-cli" $ do
       env <- getEnv
 
-      ogmiosResp <- queryOgmiosRetry (envOgmiosPort env) queryOgmios
-      ogmiosResult <- case ogmiosResp of
-        Object o
-          | Just result <- KM.lookup "result" o -> pure result
-          | Just err    <- KM.lookup "error"  o ->
-              assertFailure $ "Ogmios returned error: " <> show err
-        _ -> assertFailure $ "Unexpected ogmios response: " <> show ogmiosResp
-
-      cliResult <- queryCli (envWorkDir env) (envNodeSocket env) (envTestnetMagic env)
+      ogmiosResult <- queryOgmios env "queryLedgerState/protocolParameters" Nothing
+      cliResult <- queryCli env ["conway", "query", "protocol-parameters"]
 
       oMinFeeCoeff <- field1 ogmiosResult "minFeeCoefficient"
       cMinFeeCoeff <- field1 cliResult "txFeePerByte"
@@ -68,44 +48,11 @@ protocolParametersTests getEnv = testGroup "ProtocolParameters"
   ]
 
 -- ---------------------------------------------------------------------------
--- Queries
--- ---------------------------------------------------------------------------
-
-queryOgmios :: Int -> IO Value
-queryOgmios port =
-  WS.runClient "127.0.0.1" port "/" $ \conn -> do
-    WS.sendTextData conn $ encode $ object
-      [ "jsonrpc" .= ("2.0" :: Text)
-      , "method"  .= ("queryLedgerState/protocolParameters" :: Text)
-      , "id"      .= Null
-      ]
-    resp <- WS.receiveData conn
-    case eitherDecode resp of
-      Left err  -> fail $ "Failed to decode ogmios response: " <> err
-      Right val -> pure val
-
-queryCli :: FilePath -> FilePath -> Int -> IO Value
-queryCli workDir socketPath magic = do
-  let outFile = workDir </> "cli-protocol-parameters.json"
-  callProcess "cardano-cli"
-    [ "conway", "query", "protocol-parameters"
-    , "--testnet-magic", show magic
-    , "--socket-path", socketPath
-    , "--out-file", outFile
-    ]
-  contents <- LBS.readFile outFile
-  case eitherDecode contents of
-    Left err  -> fail $ "Failed to decode cardano-cli output: " <> err
-    Right val -> pure val
-
--- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
 
 field1 :: Value -> Key -> IO Value
-field1 val k = case parseEither (withObject "obj" (.: k)) val of
-  Left err -> assertFailure $ "Missing field " <> show k <> ": " <> err
-  Right v  -> pure v
+field1 val k = parseIO ("field " <> show k) (withObject "obj" (.: k)) val
 
 field2 :: Value -> Key -> Key -> IO Value
 field2 val k1 k2 = field1 val k1 >>= \v -> field1 v k2
