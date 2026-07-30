@@ -6,6 +6,7 @@
       nativeBuildInputs = [
         pkgs.jq
         pkgs.gh
+        pkgs.lmdb
       ];
 
       tools = {
@@ -38,6 +39,7 @@
 
       nativeBuildInputs = [
         pkgs.jq
+        pkgs.lmdb
         hsPkgs.ogmios.components.exes.ogmios
         cn.cardano-node
         cn.cardano-cli
