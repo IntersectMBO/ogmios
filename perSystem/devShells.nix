@@ -32,6 +32,7 @@
 
     devShells.integration = let
       cn = inputs.cardano-node.packages.${system};
+      cnTxGenerator = inputs.cardano-node-tx-generator.packages.${system};
     in shellFor {
       packages = p: [ p.ogmios p.ogmios-integration-tests ];
 
@@ -41,7 +42,7 @@
         cn.cardano-node
         cn.cardano-cli
         cn.cardano-testnet
-        cn.tx-generator
+        cnTxGenerator.tx-generator
       ];
 
       tools = {

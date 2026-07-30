@@ -22,6 +22,7 @@ executable ogmios-integration-tests
     Test.Integration.Query
     Test.Integration.RewardAccountSummaries
     Test.Integration.StakePools
+    Test.Integration.TxSubmission
     Test.Integration.Utxo
 
   build-depends:
@@ -33,7 +34,7 @@ executable ogmios-integration-tests
     , filepath
     , network
     , process
-    , tasty
+    , tasty          >= 1.5.4
     , tasty-hunit
     , temporary
     , text
