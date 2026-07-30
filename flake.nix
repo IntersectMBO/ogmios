@@ -30,7 +30,8 @@
     inherit ((import ./flake/lib.nix {inherit inputs;}).flake.lib) recursiveImports;
   in
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
-      imports = recursiveImports [./perSystem];
+      imports = recursiveImports [./perSystem] ++ [inputs.flake-parts.flakeModules.touchup];
+      touchup.attr.formatter.enable = false;
       systems = [
         "x86_64-linux"
         # "aarch64-linux"
