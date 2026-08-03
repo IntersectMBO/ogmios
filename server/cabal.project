@@ -24,7 +24,7 @@ constraints:
   , any.io-classes ^>= 1.8
   , any.formatting == 7.2.0
   , any.validation < 1.2
-  , any.text source
+  , any.text >= 2.1.2
 
   -- ogmios doesn't exercise io_uring code paths, so build `blockio` with the
   -- serial backend to drop the `liburing` system dependency.
@@ -46,6 +46,7 @@ packages:
   modules/hjsonschema
   modules/hspec-json-schema
   modules/json-rpc
+  test/integration
 
 tests: False
 

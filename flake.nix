@@ -14,6 +14,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.hackage.follows = "hackageNix";
     };
+    cardano-node.url = "github:IntersectMBO/cardano-node/11.0.1";
+    # tx-generator only, for the integration suite's submission test: its
+    # Ogmios submission transport (IntersectMBO/cardano-node#6609) landed
+    # after 11.0.1. Separate from the input above so the node, cli and
+    # testnet binaries stay on the released tag the server is built against;
+    # fold it back into `cardano-node` once a release carries the transport.
+    cardano-node-tx-generator.url = "github:IntersectMBO/cardano-node/ec672fd082c7839792d0ec4a0bce27e96c9bb70f";
     iohkNix.url = "github:input-output-hk/iohk-nix";
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     self.submodules = true;
@@ -23,11 +30,12 @@
     inherit ((import ./flake/lib.nix {inherit inputs;}).flake.lib) recursiveImports;
   in
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
-      imports = recursiveImports [./perSystem];
+      imports = recursiveImports [./perSystem] ++ [inputs.flake-parts.flakeModules.touchup];
+      touchup.attr.formatter.enable = false;
       systems = [
         "x86_64-linux"
         # "aarch64-linux"
-        # "aarch64-darwin"
+        "aarch64-darwin"
       ];
       perSystem = {system, ...}: {
         _module.args.pkgs = import inputs.nixpkgs {

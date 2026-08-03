@@ -3,11 +3,26 @@
     {
       config,
       pkgs,
+      system,
       ...
     }: let
-      required    = {inherit (config) packages checks;};
-      nonRequired = {inherit (config) devShells;};
-      jobs        = required // nonRequired;
+      integrationChecks = [ "ogmios-integration" ];
+      ciChecks =
+        if lib.hasSuffix "-linux" system
+        then config.checks
+        else removeAttrs config.checks integrationChecks;
+      required = {
+        inherit (config) packages;
+        checks = removeAttrs ciChecks integrationChecks;
+      };
+      nonRequired = {
+        inherit (config) devShells;
+        checks = lib.filterAttrs (name: _: lib.elem name integrationChecks) ciChecks;
+      };
+      jobs = {
+        inherit (config) packages devShells;
+        checks = ciChecks;
+      };
     in
       jobs
       // {
