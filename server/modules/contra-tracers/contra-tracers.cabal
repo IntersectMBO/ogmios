@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           contra-tracers
-version:        1.0.0
+version:        1.0.1
 synopsis:       A logging library built on top of contra-tracer to make configuring and declaring multiple tracers easy (via generics).
 description:    Please see the README on GitHub at <https://github.com/cardanosolutions/ogmios/tree/master/server/modules/contra-tracers>
 category:       Logging, Contravariant, Generics
