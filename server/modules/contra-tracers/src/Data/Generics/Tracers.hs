@@ -117,7 +117,7 @@ instance (GConfigureTracers m f0 g0, GConfigureTracers m f1 g1)
         :*:
         gConfigureTracers field tr f1
 
-instance (ToJSON msg, HasSeverityAnnotation msg, Applicative m)
+instance (ToJSON msg, HasSeverityAnnotation msg, Monad m)
     => GConfigureTracers m (K1 i (Const (Maybe Severity) (Tracer m msg))) (K1 i (Tracer m msg))
   where
     gConfigureTracers field tr = \case
