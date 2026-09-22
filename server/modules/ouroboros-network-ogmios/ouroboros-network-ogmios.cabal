@@ -86,9 +86,9 @@ library
     , cborg
     , containers
     , contra-tracer
+    , contra-tracers
     , deepseq
     , io-classes
-    , iohk-monitoring
     , network-mux
     , ouroboros-consensus
     , ouroboros-consensus:cardano

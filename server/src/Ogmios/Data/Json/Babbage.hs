@@ -29,7 +29,7 @@ import Ouroboros.Consensus.Shelley.Protocol.Praos
 
 import qualified Data.Map.Strict as Map
 
-import qualified Ouroboros.Consensus.Protocol.Praos.Header as Praos
+import qualified Cardano.Protocol.Praos.BlockHeader as Praos
 
 import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Block as Ledger
@@ -97,7 +97,7 @@ encodeContextError err = encodeText $ case err of
                     Al.AlonzoSpending (AsIx ix) -> ("spending input", ix)
                     Al.AlonzoMinting (AsIx ix) -> ("minting policy", ix)
                     Al.AlonzoCertifying (AsIx ix) -> ("publishing certificate", ix)
-                    Al.AlonzoRewarding (AsIx ix) -> ("withdrawing from account", ix)
+                    Al.AlonzoWithdrawing (AsIx ix) -> ("withdrawing from account", ix)
           in "Couldn't find corresponding redeemer for " <> title <> " #" <> show ptr <> ". Verify your transaction's construction."
     Ba.AlonzoContextError (Al.TimeTranslationPastHorizon e) ->
         "Uncomputable slot arithmetic; transaction's validity bounds go beyond the foreseeable end of the current era: " <> e
@@ -264,7 +264,7 @@ encodeTx (fmt, opts) x =
     encodeObject
         ( Shelley.encodeTxId (Ledger.txIdTxBody @BabbageEra (Ba.atBody x))
        <>
-        "spends" .= Alonzo.encodeIsValid (Ba.atIsValid x)
+        "spends" .= Alonzo.encodeIsValid (Ba.atIsPhase2Valid x)
        <>
         encodeTxBody opts (Ba.atBody x) (strictMaybe mempty (Map.keys . snd) auxiliary)
        <>

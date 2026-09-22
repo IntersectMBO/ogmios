@@ -9,12 +9,9 @@ module Cardano.Network.Protocol.NodeToClient.Trace
 
 import Prelude
 
-import Cardano.BM.Data.Severity
-    ( Severity (..)
-    )
-import Cardano.BM.Data.Tracer
-    ( HasPrivacyAnnotation (..)
-    , HasSeverityAnnotation (..)
+import Data.Severity
+    ( HasSeverityAnnotation (..)
+    , Severity (..)
     )
 import Codec.CBOR.Term
     ( Term
@@ -154,7 +151,6 @@ encodeTraceClient encodeTx encodeErr = \case
             HandshakeDecodeError{} -> Json.String "HandshakeDecodeError"
             Refused{} -> Json.String "ServerRejected"
 
-instance HasPrivacyAnnotation (TraceClient tx err)
 instance HasSeverityAnnotation (TraceClient tx err) where
     getSeverityAnnotation = \case
         TrTxSubmission{} -> Info

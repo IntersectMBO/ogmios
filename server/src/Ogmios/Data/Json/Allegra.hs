@@ -15,7 +15,7 @@ import Ouroboros.Consensus.Shelley.Protocol.TPraos (
 
 import qualified Data.Map as Map
 
-import qualified Cardano.Protocol.TPraos.BHeader as TPraos
+import qualified Cardano.Protocol.TPraos.BlockHeader as TPraos
 
 import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Block as Ledger

@@ -106,11 +106,11 @@ encodeTx ::
     (MetadataFormat, IncludeCbor) ->
     Di.DijkstraTx Ledger.TopTx DijkstraEra ->
     Json
-encodeTx (_fmt, opts) tx@Di.DijkstraTx{Di.dtBody, Di.dtIsValid} =
+encodeTx (_fmt, opts) tx@Di.DijkstraTx{Di.dtBody, Di.dtIsPhase2Valid} =
     encodeObject
         ( Shelley.encodeTxId (Ledger.txIdTxBody @DijkstraEra dtBody)
             <> "spends"
-            .= Alonzo.encodeIsValid dtIsValid
+            .= Alonzo.encodeIsValid dtIsPhase2Valid
             <> if includeTransactionCbor opts
                 then
                     "cbor" .= encodeByteStringBase16 (encodeCbor @DijkstraEra tx)
@@ -221,7 +221,7 @@ encodeTxOut opts (Ba.BabbageTxOut addr value datum script) =
 
 encodeUtxo ::
     forall era.
-    ( Al.AlonzoEraScript era
+    ( Di.DijkstraEraScript era
     , Ledger.Script era ~ Al.AlonzoScript era
     , Ledger.Value era ~ Ma.MaryValue
     , Ledger.TxOut era ~ Ba.BabbageTxOut era
@@ -311,7 +311,7 @@ encodeScriptPurposeItem =
                 .= encodeText "mint"
                 <> "policy"
                 .= Mary.encodePolicyId policyId
-        Di.DijkstraRewarding (AsItem acct) ->
+        Di.DijkstraWithdrawing (AsItem acct) ->
             "purpose"
                 .= encodeText "withdraw"
                 <> "rewardAccount"
@@ -370,8 +370,8 @@ encodeScriptPurposeIndex = \case
         translate (Al.AlonzoMinting ix)
     Di.DijkstraCertifying (AsIx (AsIx -> ix)) ->
         translate (Al.AlonzoCertifying ix)
-    Di.DijkstraRewarding ix ->
-        translate (Al.AlonzoRewarding ix)
+    Di.DijkstraWithdrawing ix ->
+        translate (Al.AlonzoWithdrawing ix)
     Di.DijkstraVoting (AsIx ix) ->
         encodeObject
             ( "index"
@@ -684,7 +684,7 @@ encodeContextError err = encodeText $ case err of
                     Di.DijkstraSpending (AsIx ix) -> ("spending input", ix)
                     Di.DijkstraMinting (AsIx ix) -> ("minting policy", ix)
                     Di.DijkstraCertifying (AsIx ix) -> ("publishing certificate", ix)
-                    Di.DijkstraRewarding (AsIx ix) -> ("withdrawing from account", ix)
+                    Di.DijkstraWithdrawing (AsIx ix) -> ("withdrawing from account", ix)
                     Di.DijkstraVoting (AsIx ix) -> ("voting as voter", ix)
                     Di.DijkstraProposing (AsIx ix) -> ("proposing governance proposal", ix)
                     Di.DijkstraGuarding (AsIx ix) -> ("guarding script", ix)
@@ -693,3 +693,15 @@ encodeContextError err = encodeText $ case err of
         "Uncomputable slot arithmetic; transaction's validity bounds go beyond the foreseeable end of the current era: " <> e
     Di.ConwayContextError (Cn.BabbageContextError (Ba.AlonzoContextError (Al.TranslationLogicMissingInput i))) ->
         "Unknown transaction input (missing from UTxO set): " <> Shelley.stringifyTxIn i
+    Di.SubTxContextError txId _e ->
+        "Failed to build the script context of a sub-transaction (id: " <> Shelley.stringifyTxId txId <> ")."
+    Di.UnsupportedScriptInSubTx lang txId ->
+        "Unsupported script language " <> Alonzo.stringifyLanguage lang <> " in sub-transaction (id: " <> Shelley.stringifyTxId txId <> "). Use plutus:v4 or higher in sub-transactions."
+    Di.DirectDepositsNotSupported{} ->
+        "Direct deposits aren't supported in plutus:v1, plutus:v2 nor plutus:v3. Use plutus:v4 or higher, or remove them."
+    Di.AccountBalanceIntervalsNotSupported{} ->
+        "Account balance intervals aren't supported in plutus:v1, plutus:v2 nor plutus:v3. Use plutus:v4 or higher, or remove them."
+    Di.GuardScriptHashesNotSupported{} ->
+        "Script hashes in guards aren't supported in plutus:v1, plutus:v2 nor plutus:v3. Use plutus:v4 or higher."
+    Di.RequiredTopLevelGuardsNotSupported{} ->
+        "Required top-level guards aren't supported in plutus:v1, plutus:v2 nor plutus:v3. Use plutus:v4 or higher, or remove them."

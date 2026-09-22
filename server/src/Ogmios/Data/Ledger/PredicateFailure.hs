@@ -17,7 +17,7 @@ module Ogmios.Data.Ledger.PredicateFailure
     , ExUnits (..)
     , ExBudget (..)
     , Hash
-    , IsValid (..)
+    , IsPhase2Valid (..)
     , KeyHash (..)
     , KeyRole (..)
     , Language (..)
@@ -58,7 +58,7 @@ import Cardano.Ledger.Alonzo.Scripts
     ( ExUnits (..)
     )
 import Cardano.Ledger.Alonzo.Tx
-    ( IsValid (..)
+    ( IsPhase2Valid (..)
     )
 import Cardano.Ledger.BaseTypes
     ( Anchor
@@ -340,7 +340,7 @@ data MultiEraPredicateFailure
 
     -- The validation tag on the transaction must match with the transaction outcome.
     | ValidationTagMismatch
-        { validationTag :: IsValid
+        { validationTag :: IsPhase2Valid
         , mismatchReason :: TagMismatchDescription
         }
 
