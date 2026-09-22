@@ -75,9 +75,9 @@ describe('TransactionSubmission', () => {
           expect(e.code).toBe(-32602)
           expect(e.data).toEqual({
             allegra: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 3.",
-            alonzo: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 4.",
-            babbage: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 4.",
-            conway: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 4.",
+            alonzo: "invalid or incomplete value of type 'Transaction': end of input",
+            babbage: "invalid or incomplete value of type 'Transaction': end of input",
+            conway: "invalid or incomplete value of type 'Transaction': end of input",
             mary: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 3.",
             shelley: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 3."
           })
@@ -99,9 +99,12 @@ describe('TransactionSubmission', () => {
           expect(e).toBeInstanceOf(JSONRPCError)
           expect(e.code).toBe(-32602)
           expect(e.data).toEqual({
-            alonzo: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 3, but found 4.",
-            babbage: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 3, but found 4.",
-            conway: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 3, but found 4.",
+            alonzo: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
+              'field fee with key 2, not decoded.',
+            babbage: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
+              'field fee with key 2, not decoded.',
+            conway: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
+              'field fee with key 2, not decoded.',
             mary: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. field Fee with key 2, not decoded.",
             allegra: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
               'field Fee with key 2, not decoded.',
