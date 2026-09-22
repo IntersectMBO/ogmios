@@ -5,7 +5,6 @@
       integrationTestsExe =
         hsPkgs.ogmios-integration-tests.components.exes.ogmios-integration-tests;
       cn = inputs.cardano-node.packages.${system};
-      cnTxGenerator = inputs.cardano-node-tx-generator.packages.${system};
 
       # The suite spawns ogmios, cardano-node, cardano-cli, cardano-testnet
       # and tx-generator (Test.Integration.Env resolves them from PATH), so
@@ -29,7 +28,7 @@
                 cn.cardano-node
                 cn.cardano-cli
                 cn.cardano-testnet
-                cnTxGenerator.tx-generator
+                cn.tx-generator
               ]}
           '';
     in
