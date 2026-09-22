@@ -3,7 +3,7 @@
 #  License, v. 2.0. If a copy of the MPL was not distributed with this
 #  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-ARG CARDANO_NODE_IMAGE=ghcr.io/intersectmbo/cardano-node:11.0.1
+ARG CARDANO_NODE_IMAGE=ghcr.io/intersectmbo/cardano-node:11.1.1
 ARG TINI_VERSION=v0.19.0
 
 #                                                                              #
