@@ -22,6 +22,9 @@ module Ogmios.Data.Json.Dijkstra (
 
 import Ogmios.Data.Json.Prelude
 
+import Cardano.Ledger.Alonzo.Plutus.Context (
+    ContextError,
+ )
 import Cardano.Ledger.Alonzo.Plutus.TxInfo (
     TxOutSource (..),
  )
@@ -648,10 +651,21 @@ encodeGovAction = \case
             )
 
 encodeContextError ::
-    (PlutusPurpose AsIx era ~ Di.DijkstraPlutusPurpose AsIx era) =>
+    ( PlutusPurpose AsIx era ~ Di.DijkstraPlutusPurpose AsIx era
+    , ContextError era ~ Di.DijkstraContextError era
+    ) =>
     Di.DijkstraContextError era ->
     Json
-encodeContextError err = encodeText $ case err of
+encodeContextError =
+    encodeText . stringifyContextError
+
+stringifyContextError ::
+    ( PlutusPurpose AsIx era ~ Di.DijkstraPlutusPurpose AsIx era
+    , ContextError era ~ Di.DijkstraContextError era
+    ) =>
+    Di.DijkstraContextError era ->
+    Text
+stringifyContextError err = case err of
     Di.PointerPresentInOutput{} ->
         "Found outputs to a (legacy) pointer address. Pointer addresses are no longer supported as of Dijkstra."
     Di.ConwayContextError (Cn.CertificateNotSupported{}) ->
@@ -693,8 +707,8 @@ encodeContextError err = encodeText $ case err of
         "Uncomputable slot arithmetic; transaction's validity bounds go beyond the foreseeable end of the current era: " <> e
     Di.ConwayContextError (Cn.BabbageContextError (Ba.AlonzoContextError (Al.TranslationLogicMissingInput i))) ->
         "Unknown transaction input (missing from UTxO set): " <> Shelley.stringifyTxIn i
-    Di.SubTxContextError txId _e ->
-        "Failed to build the script context of a sub-transaction (id: " <> Shelley.stringifyTxId txId <> ")."
+    Di.SubTxContextError txId e ->
+        "Failed to build the script context of a sub-transaction (id: " <> Shelley.stringifyTxId txId <> "): " <> stringifyContextError e
     Di.UnsupportedScriptInSubTx lang txId ->
         "Unsupported script language " <> Alonzo.stringifyLanguage lang <> " in sub-transaction (id: " <> Shelley.stringifyTxId txId <> "). Use plutus:v4 or higher in sub-transactions."
     Di.DirectDepositsNotSupported{} ->
