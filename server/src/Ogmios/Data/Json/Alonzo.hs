@@ -32,7 +32,7 @@ import Cardano.Ledger.Compactible (
  )
 
 import qualified Cardano.Crypto.Hash.Class as CC
-import qualified Cardano.Protocol.TPraos.BHeader as TPraos
+import qualified Cardano.Protocol.TPraos.BlockHeader as TPraos
 
 import qualified Cardano.Ledger.Api as Ledger
 import qualified Cardano.Ledger.Block as Ledger
@@ -198,8 +198,10 @@ encodeGenesis x =
                     .= (encodeInteger . (`div` 8) . unCoin . Al.unCoinPerWord) (Al.agCoinsPerUTxOWord x)
                     <> "plutusCostModels"
                     .= encodeCostModels
-                        ( Al.mkCostModels (Map.singleton Ledger.PlutusV1 (Al.agPlutusV1CostModel x))
-                            <> fromMaybe Al.emptyCostModels (Al.aecCostModels =<< Al.agExtraConfig x)
+                        ( Al.mkCostModels
+                            ( Map.singleton Ledger.PlutusV1 (Al.agPlutusV1CostModel x)
+                                <> maybe mempty Al.costModelsValid (strictMaybe Nothing Al.aecCostModels (Al.agExtraConfig x))
+                            )
                         )
                     <> "scriptExecutionPrices"
                     .= encodePrices (Al.agPrices x)
@@ -217,12 +219,12 @@ encodeGenesis x =
         )
 
 encodeIsValid ::
-    Al.IsValid ->
+    Al.IsPhase2Valid ->
     Json
 encodeIsValid = \case
-    Al.IsValid True ->
+    Al.Phase2Valid ->
         encodeText "inputs"
-    Al.IsValid False ->
+    Al.Phase2Invalid ->
         encodeText "collaterals"
 
 encodeLanguage ::
@@ -490,7 +492,7 @@ encodeScriptPurposeIndex =
                 <> "purpose"
                 .= encodeText "publish"
             )
-        Al.AlonzoRewarding (Ledger.AsIx ix) ->
+        Al.AlonzoWithdrawing (Ledger.AsIx ix) ->
             ( "index"
                 .= encodeWord32 ix
                 <> "purpose"
@@ -516,7 +518,7 @@ encodeScriptPurposeItem =
                 .= encodeText "mint"
                 <> "policy"
                 .= Mary.encodePolicyId policyId
-        Al.AlonzoRewarding (Ledger.AsItem acct) ->
+        Al.AlonzoWithdrawing (Ledger.AsItem acct) ->
             SJust
                 $ "purpose"
                 .= encodeText "withdraw"
@@ -539,7 +541,7 @@ encodeTx (fmt, opts) x =
     encodeObject
         ( Shelley.encodeTxId (Ledger.txIdTxBody @AlonzoEra (Al.atBody x))
             <> "spends"
-            .= encodeIsValid (Al.atIsValid x)
+            .= encodeIsValid (Al.atIsPhase2Valid x)
             <> encodeTxBody (Al.atBody x) (strictMaybe mempty (Map.keys . snd) auxiliary)
             <> "metadata"
             .=? OmitWhenNothing fst auxiliary

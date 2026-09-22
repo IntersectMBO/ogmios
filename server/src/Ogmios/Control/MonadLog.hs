@@ -10,7 +10,6 @@ module Ogmios.Control.MonadLog
       -- * Severity
     , Severity (..)
     , HasSeverityAnnotation (..)
-    , getSeverityAnnotation'
 
       -- * Tracer
     , Tracer
@@ -36,6 +35,7 @@ import Control.Monad.IOSim
     )
 import Control.Tracer
     ( Tracer (..)
+    , emit
     , natTracer
     , nullTracer
     , traceWith
@@ -77,8 +77,6 @@ import System.IO
     , utf8
     )
 
-import qualified Cardano.BM.Data.Severity as BM
-import qualified Cardano.BM.Data.Tracer as BM
 import qualified Data.ByteString.Lazy.Char8 as BL8
 
 class Monad m => MonadLog (m :: Type -> Type) where
@@ -120,7 +118,7 @@ withStdoutTracers version tracers action = do
     lock <- newTMVarIO ()
     action (configureTracers tracers (tracer lock))
   where
-    tracer lock = Tracer $ \(SomeMsg minSeverity tracerName msg) -> do
+    tracer lock = Tracer $ emit $ \(SomeMsg minSeverity tracerName msg) -> do
         let severity = getSeverityAnnotation msg
         when (severity >= minSeverity) $ liftIO $ withTMVar lock $ \() -> do
             mkEnvelop msg severity tracerName >>= liftIO . BL8.putStrLn . encodingToLazyByteString
@@ -136,23 +134,3 @@ withStdoutTracers version tracers action = do
             <> pair "thread"    (toEncoding threadId)
             <> pair "message"   (pairs $ pair context (toEncoding msg))
             <> pair "version"   (toEncoding version)
-
--- | Working around iohk-monitoring. Ogmios doesn't use 'Severity' from
--- iohk-monitoring because the JSON instances are bonkers and, it defines way
--- too many severity levels. Still, there are places where we need to convert
--- from existing severity types (when wrapping traces from ouroboros-network in
--- particular).
-getSeverityAnnotation' :: BM.HasSeverityAnnotation msg => msg -> Severity
-getSeverityAnnotation' =
-    toSeverity . BM.getSeverityAnnotation
-  where
-    toSeverity :: BM.Severity -> Severity
-    toSeverity = \case
-        BM.Debug -> Debug
-        BM.Info -> Info
-        BM.Notice -> Notice
-        BM.Warning -> Warning
-        BM.Error -> Error
-        BM.Critical -> Error
-        BM.Alert -> Error
-        BM.Emergency -> Error

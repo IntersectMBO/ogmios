@@ -32,8 +32,8 @@ library:
     - cborg
     - containers
     - contra-tracer
+    - contra-tracers
     - io-classes
-    - iohk-monitoring
     - network-mux
     - cardano-diffusion
     - deepseq

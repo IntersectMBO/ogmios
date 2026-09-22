@@ -46,6 +46,8 @@ library:
     - bech32-th
     - binary
     - bytestring
+    - cardano-base
+    - cardano-binary
     - cardano-crypto
     - cardano-crypto-class
     - cardano-crypto-wrapper
@@ -61,6 +63,7 @@ library:
     - cardano-ledger-dijkstra
     - cardano-ledger-mary
     - cardano-ledger-shelley
+    - cardano-protocol
     - cardano-ledger-shelley
     - cardano-protocol-tpraos
     - cardano-slotting
@@ -81,11 +84,11 @@ library:
     - http-types
     - io-classes
     - io-sim
-    - iohk-monitoring
     - iproute
     - json-rpc
     - lens-aeson
     - memory
+    - mempack
     - mtl
     - optparse-applicative
     - ouroboros-consensus
@@ -147,11 +150,13 @@ tests:
     - aeson-pretty
     - bytestring
     - cardano-crypto-class
+    - cardano-ledger-allegra
     - cardano-ledger-alonzo
     - cardano-ledger-alonzo:testlib
     - cardano-ledger-api
     - cardano-ledger-babbage
     - cardano-ledger-binary
+    - cardano-ledger-conway
     - cardano-ledger-conway:testlib
     - cardano-ledger-core
     - cardano-ledger-mary

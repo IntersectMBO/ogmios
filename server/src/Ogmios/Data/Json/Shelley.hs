@@ -29,6 +29,10 @@ import Ouroboros.Consensus.Shelley.Protocol.TPraos (
 
  )
 
+import Cardano.Base.IP (
+    unIPv4,
+    unIPv6,
+ )
 import Data.MemPack.Buffer (
     byteArrayToShortByteString,
  )
@@ -37,12 +41,13 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as SBS
 import qualified Data.Map.Strict as Map
 
+import qualified Cardano.Binary.FixedSizeCodec as CC
 import qualified Cardano.Crypto.DSIGN.Class as CC
 import qualified Cardano.Crypto.Hash.Class as CC
 import qualified Cardano.Crypto.KES.Class as CC
 import qualified Cardano.Crypto.VRF.Class as CC
 
-import qualified Cardano.Protocol.TPraos.BHeader as TPraos
+import qualified Cardano.Protocol.TPraos.BlockHeader as TPraos
 import qualified Cardano.Protocol.TPraos.OCert as TPraos
 
 import qualified Cardano.Ledger.Api as Ledger
@@ -149,7 +154,7 @@ encodeCertVRF ::
     CC.CertVRF alg ->
     Json
 encodeCertVRF =
-    encodeByteStringBase16 . CC.rawSerialiseCertVRF
+    encodeByteStringBase16 . CC.rawEncodeFixedSized
 
 encodeCertifiedVRF ::
     (CC.VRFAlgorithm alg) =>
@@ -453,7 +458,7 @@ encodeMetadataBlob (fmt, opts) =
             Sh.I n ->
                 "int" .= encodeInteger n
             Sh.B bytes ->
-                "bytes" .= encodeByteStringBase16 bytes
+                "bytes" .= encodeByteStringBase16 (SBS.fromShort (byteArrayToShortByteString bytes))
             Sh.S txt ->
                 "string" .= encodeText txt
             Sh.List xs ->
@@ -816,7 +821,7 @@ encodeProtVer x =
     "major"
         .= encodeVersion (Ledger.pvMajor x)
         <> "minor"
-        .= encodeNatural (Ledger.pvMinor x)
+        .= encodeWord32 (Ledger.pvMinor x)
         & encodeObject
 
 encodeRewardAcnt ::
@@ -857,7 +862,7 @@ encodeSignedKES ::
     CC.SignedKES alg a ->
     Json
 encodeSignedKES (CC.SignedKES raw) =
-    encodeByteStringBase16 . CC.rawSerialiseSigKES $ raw
+    encodeByteStringBase16 . CC.rawEncodeFixedSized $ raw
 
 encodeShelleyGenesisStaking :: Sh.ShelleyGenesisStaking -> Json
 encodeShelleyGenesisStaking x =
@@ -887,7 +892,7 @@ encodeSignedDSIGN ::
     CC.SignedDSIGN alg a ->
     Json
 encodeSignedDSIGN (CC.SignedDSIGN raw) =
-    encodeByteStringBase16 . CC.rawSerialiseSigDSIGN $ raw
+    encodeByteStringBase16 . CC.rawEncodeFixedSized $ raw
 
 encodeStakePoolRelay ::
     Ledger.StakePoolRelay ->
@@ -899,11 +904,11 @@ encodeStakePoolRelay =
                 .= encodeText "ipAddress"
                 <> "ipv4"
                 .=? OmitWhenNothing
-                    encodeIPv4
+                    (encodeIPv4 . unIPv4)
                     ipv4
                 <> "ipv6"
                 .=? OmitWhenNothing
-                    encodeIPv6
+                    (encodeIPv6 . unIPv6)
                     ipv6
                 <> "port"
                 .=? OmitWhenNothing
@@ -1056,21 +1061,21 @@ encodeVerKeyDSign ::
     CC.VerKeyDSIGN alg ->
     Json
 encodeVerKeyDSign =
-    encodeByteStringBase16 . CC.rawSerialiseVerKeyDSIGN
+    encodeByteStringBase16 . CC.rawEncodeFixedSized
 
 encodeVerKeyKES ::
     (CC.KESAlgorithm alg) =>
     CC.VerKeyKES alg ->
     Json
 encodeVerKeyKES =
-    encodeByteStringBase16 . CC.rawSerialiseVerKeyKES
+    encodeByteStringBase16 . CC.rawEncodeFixedSized
 
 encodeVerKeyVRF ::
     (CC.VRFAlgorithm alg) =>
     CC.VerKeyVRF alg ->
     Json
 encodeVerKeyVRF =
-    encodeByteStringBase16 . CC.rawSerialiseVerKeyVRF
+    encodeByteStringBase16 . CC.rawEncodeFixedSized
 
 encodeVKey ::
     Ledger.VKey any ->
@@ -1132,12 +1137,12 @@ encodeBootstrapWitness (Ledger.BootstrapWitness key sig cc attr) =
         .=? OmitWhen
             BS.null
             encodeByteStringBase16
-            (Ledger.unChainCode cc)
+            (SBS.fromShort (byteArrayToShortByteString (Ledger.unChainCode cc)))
         <> "addressAttributes"
         .=? OmitWhen
             BS.null
             encodeByteStringBase16
-            attr
+            (SBS.fromShort (byteArrayToShortByteString attr))
         & encodeObject
 
 --
@@ -1222,7 +1227,7 @@ stringifyVKey ::
     Ledger.VKey any ->
     Text
 stringifyVKey =
-    encodeBase16 . CC.rawSerialiseVerKeyDSIGN . Ledger.unVKey
+    encodeBase16 . CC.rawEncodeFixedSized . Ledger.unVKey
 
 --
 -- CIP-0005 Human-Readable Prefixes
