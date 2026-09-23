@@ -1840,11 +1840,12 @@ parseQueryLedgerProtocolParameters genResultInEra =
                             (LSQ.BlockQuery (QueryIfCurrentConway GetCurrentPParams))
                             (eraMismatchOrResult Conway.encodePParams)
                             (genResultInEra (Proxy @ConwayEra))
-                -- TODO(dijkstra): Conway.encodePParams matches ConwayPParams,
-                -- but Dijkstra has its own DijkstraPParams. Needs a Dijkstra-side
-                -- PParams encoder before this arm can route the query.
                 SomeShelleyEra ShelleyBasedEraDijkstra ->
-                    Nothing
+                    Just
+                        $ SomeStandardQuery
+                            (LSQ.BlockQuery (QueryIfCurrentDijkstra GetCurrentPParams))
+                            (eraMismatchOrResult Dijkstra.encodePParams)
+                            (genResultInEra (Proxy @DijkstraEra))
 
 parseQueryLedgerGovernanceProposals ::
     forall crypto f.

@@ -45,6 +45,9 @@ import Cardano.Ledger.Babbage
 import Cardano.Ledger.Conway
     ( ApplyTxError (ConwayApplyTxError)
     )
+import Cardano.Ledger.Dijkstra
+    ( ApplyTxError (DijkstraApplyTxError)
+    )
 import Cardano.Ledger.Mary
     ( ApplyTxError (MaryApplyTxError)
     )
@@ -335,6 +338,7 @@ genHardForkApplyTxErr = frequency
     , ( 10, ApplyTxErrAlonzo . AlonzoApplyTxError . pure <$> arbitrary )
     , ( 25, ApplyTxErrBabbage . BabbageApplyTxError . pure <$> arbitrary )
     , ( 25, ApplyTxErrConway . ConwayApplyTxError . pure <$> arbitrary )
+    , ( 25, ApplyTxErrDijkstra . DijkstraApplyTxError . pure <$> arbitrary )
     ]
 
 genEvaluateTransactionResponse :: Gen (EvaluateTransactionResponse Block)

@@ -262,7 +262,7 @@ instance ConvertRawTxId (GenTx (CardanoBlock StandardCrypto)) where
         GenTxIdAlonzo x -> toRawTxIdHash x
         GenTxIdBabbage x -> toRawTxIdHash x
         GenTxIdConway x -> toRawTxIdHash x
-        _ -> error "TODO(dijkstra): toRawTxIdHash Dijkstra arm (GenTxIdDijkstra)"
+        GenTxIdDijkstra x -> toRawTxIdHash x
 
 -- | A handy type to pass clients around
 data Clients m block = Clients

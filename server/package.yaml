@@ -159,6 +159,8 @@ tests:
     - cardano-ledger-conway
     - cardano-ledger-conway:testlib
     - cardano-ledger-core
+    - cardano-ledger-dijkstra
+    - cardano-ledger-dijkstra:testlib
     - cardano-ledger-mary
     - cardano-ledger-shelley
     - cardano-slotting

@@ -79,6 +79,7 @@ library
       Ogmios.Data.Ledger.PredicateFailure.Alonzo
       Ogmios.Data.Ledger.PredicateFailure.Babbage
       Ogmios.Data.Ledger.PredicateFailure.Conway
+      Ogmios.Data.Ledger.PredicateFailure.Dijkstra
       Ogmios.Data.Ledger.PredicateFailure.Mary
       Ogmios.Data.Ledger.PredicateFailure.Shelley
       Ogmios.Data.Ledger.Rewards
@@ -361,6 +362,8 @@ test-suite unit
     , cardano-ledger-conway
     , cardano-ledger-conway:testlib
     , cardano-ledger-core
+    , cardano-ledger-dijkstra
+    , cardano-ledger-dijkstra:testlib
     , cardano-ledger-mary
     , cardano-ledger-shelley
     , cardano-slotting
