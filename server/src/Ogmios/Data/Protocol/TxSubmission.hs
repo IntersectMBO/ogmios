@@ -81,6 +81,7 @@ import Cardano.Ledger.Alonzo.Tx (
     AlonzoEraTx,
  )
 import Cardano.Ledger.Alonzo.UTxO (
+    AlonzoEraUTxO,
     AlonzoScriptsNeeded (..),
  )
 import Cardano.Ledger.Api (
@@ -414,6 +415,7 @@ evaluation in any era after Alonzo (incl.).
 -}
 type CanEvaluateScriptsInEra era =
     ( AlonzoEraTx era
+    , AlonzoEraUTxO era
     , BabbageEraTxBody era
     , EraPlutusContext era
     , EraUTxO era

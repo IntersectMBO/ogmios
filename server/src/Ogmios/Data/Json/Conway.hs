@@ -234,7 +234,7 @@ encodeContextError err = encodeText $ case err of
                     Cn.ConwaySpending (AsIx ix) -> ("spending input", ix)
                     Cn.ConwayMinting (AsIx ix) -> ("minting policy", ix)
                     Cn.ConwayCertifying (AsIx ix) -> ("publishing certificate", ix)
-                    Cn.ConwayRewarding (AsIx ix) -> ("withdrawing from account", ix)
+                    Cn.ConwayWithdrawing (AsIx ix) -> ("withdrawing from account", ix)
                     Cn.ConwayVoting (AsIx ix) -> ("voting as voter", ix)
                     Cn.ConwayProposing (AsIx ix) -> ("proposing governance proposal", ix)
           in "Couldn't find corresponding redeemer for " <> title <> " #" <> show ptr <> ". Verify your transaction's construction."
@@ -685,8 +685,8 @@ encodeScriptPurposeIndex = \case
         translate (Al.AlonzoMinting ix)
     Cn.ConwayCertifying (AsIx (AsIx -> ix)) ->
         translate (Al.AlonzoCertifying ix)
-    Cn.ConwayRewarding ix ->
-        translate (Al.AlonzoRewarding ix)
+    Cn.ConwayWithdrawing ix ->
+        translate (Al.AlonzoWithdrawing ix)
     Cn.ConwayVoting (AsIx ix) ->
         encodeObject
             ( "index" .=
@@ -714,7 +714,7 @@ encodeScriptPurposeItem = encodeObject . \case
     Cn.ConwayMinting (AsItem policyId) ->
         "purpose" .= encodeText "mint" <>
         "policy" .= Mary.encodePolicyId policyId
-    Cn.ConwayRewarding (AsItem acct) ->
+    Cn.ConwayWithdrawing (AsItem acct) ->
         "purpose" .= encodeText "withdraw" <>
         "rewardAccount" .= Shelley.encodeRewardAcnt acct
     Cn.ConwayVoting (AsItem voter) ->
@@ -745,7 +745,7 @@ encodeTx (fmt, opts) x =
     encodeObject
         ( Shelley.encodeTxId (Ledger.txIdTxBody @ConwayEra (Cn.atBody x))
        <>
-        "spends" .= Alonzo.encodeIsValid (Cn.atIsValid x)
+        "spends" .= Alonzo.encodeIsValid (Cn.atIsPhase2Valid x)
        <>
         encodeTxBody opts (Cn.atBody x) (strictMaybe mempty (Map.keys . snd) auxiliary)
        <>

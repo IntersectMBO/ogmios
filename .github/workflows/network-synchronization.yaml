@@ -13,7 +13,10 @@ on:
         type: number
 
 env:
-  CARDANO_NODE_VERSION: "11.0.1"
+  CARDANO_NODE_VERSION: "11.1.1"
+  # cardano-playground has no node-11.1.1-config tag yet, so configs stay
+  # pinned to the newest tagged set.
+  CARDANO_CONFIG_TAG: "node-11.0.1-config"
   S3_DB_PATH: s3://${{ secrets.AWS_S3_BUCKET }}/db-preview
 
 jobs:
@@ -22,7 +25,7 @@ jobs:
     steps:
     - name: Download cardano-node configs
       env:
-        BASE_URL: https://raw.githubusercontent.com/input-output-hk/cardano-playground/refs/tags/node-${{ env.CARDANO_NODE_VERSION }}-config/docs/environments/preview
+        BASE_URL: https://raw.githubusercontent.com/input-output-hk/cardano-playground/refs/tags/${{ env.CARDANO_CONFIG_TAG }}/docs/environments/preview
       run: |
         mkdir -p config/preview
         cd config/preview

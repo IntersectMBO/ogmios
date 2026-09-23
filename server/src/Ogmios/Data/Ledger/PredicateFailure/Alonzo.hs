@@ -15,6 +15,9 @@ import Cardano.Ledger.Address
 import Cardano.Ledger.Core
     ( EraRule
     )
+import Control.State.Transition
+    ( STS (..)
+    )
 import Ogmios.Data.Ledger.PredicateFailure
     ( ContextErrorInAnyEra (..)
     , DiscriminatedEntities (..)
@@ -71,7 +74,7 @@ encodeUtxowFailure
         ( Era era
         )
     => AlonzoBasedEra era
-    -> (Sh.PredicateFailure (EraRule "UTXO" era) -> MultiEraPredicateFailure)
+    -> (PredicateFailure (EraRule "UTXO" era) -> MultiEraPredicateFailure)
     -> Al.AlonzoUtxowPredFailure era
     -> MultiEraPredicateFailure
 encodeUtxowFailure era encodeUtxoFailureInEra = \case
@@ -99,7 +102,7 @@ encodeUtxoFailure
         ( Era era
         )
     => AlonzoBasedEra era
-    -> (Sh.PredicateFailure (EraRule "UTXOS" era) -> MultiEraPredicateFailure)
+    -> (PredicateFailure (EraRule "UTXOS" era) -> MultiEraPredicateFailure)
     -> Al.AlonzoUtxoPredFailure era
     -> MultiEraPredicateFailure
 encodeUtxoFailure era encodeUtxosFailure' = \case

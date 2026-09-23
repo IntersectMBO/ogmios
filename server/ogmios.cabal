@@ -148,6 +148,8 @@ library
     , bech32-th
     , binary
     , bytestring
+    , cardano-base
+    , cardano-binary
     , cardano-crypto
     , cardano-crypto-class
     , cardano-crypto-wrapper
@@ -163,6 +165,7 @@ library
     , cardano-ledger-dijkstra
     , cardano-ledger-mary
     , cardano-ledger-shelley
+    , cardano-protocol
     , cardano-protocol-tpraos
     , cardano-slotting
     , cardano-strict-containers
@@ -182,7 +185,6 @@ library
     , http-types
     , io-classes
     , io-sim
-    , iohk-monitoring
     , iproute
     , json-rpc
     , lens-aeson
