@@ -34,8 +34,8 @@ import Control.Monad.IOSim
     ( IOSim
     )
 import Control.Tracer
-    ( Tracer (..)
-    , emit
+    ( Tracer
+    , mkTracer
     , natTracer
     , nullTracer
     , traceWith
@@ -118,7 +118,7 @@ withStdoutTracers version tracers action = do
     lock <- newTMVarIO ()
     action (configureTracers tracers (tracer lock))
   where
-    tracer lock = Tracer $ emit $ \(SomeMsg minSeverity tracerName msg) -> do
+    tracer lock = mkTracer $ \(SomeMsg minSeverity tracerName msg) -> do
         let severity = getSeverityAnnotation msg
         when (severity >= minSeverity) $ liftIO $ withTMVar lock $ \() -> do
             mkEnvelop msg severity tracerName >>= liftIO . BL8.putStrLn . encodingToLazyByteString
