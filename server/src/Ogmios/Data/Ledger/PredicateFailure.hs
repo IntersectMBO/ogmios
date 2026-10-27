@@ -6,7 +6,9 @@
 
 module Ogmios.Data.Ledger.PredicateFailure
     ( module Ogmios.Data.Ledger.PredicateFailure
+    , AccountBalanceInterval (..)
     , Addr (..)
+    , BlsKey
     , TxAuxDataHash
     , Coin
     , Credential (..)
@@ -20,6 +22,7 @@ module Ogmios.Data.Ledger.PredicateFailure
     , IsPhase2Valid (..)
     , KeyHash (..)
     , KeyRole (..)
+    , KeyRoleVRF (..)
     , Language (..)
     , Network (..)
     , ProtVer (..)
@@ -34,6 +37,7 @@ module Ogmios.Data.Ledger.PredicateFailure
     , TxIn (..)
     , TxOutInAnyEra (..)
     , VKey (..)
+    , VRFVerKeyHash (..)
     , ValidityInterval (..)
     , ValueInAnyEra (..)
     , Voter (..)
@@ -79,10 +83,15 @@ import Cardano.Ledger.Conway.Governance
 import Cardano.Ledger.Credential
     ( Credential (..)
     )
+import Cardano.Ledger.Dijkstra.Scripts
+    ( AccountBalanceInterval (..)
+    )
 import Cardano.Ledger.Hashes
     ( DataHash
+    , KeyRoleVRF (..)
     , ScriptHash (..)
     , TxAuxDataHash
+    , VRFVerKeyHash (..)
     )
 import Cardano.Ledger.Keys
     ( KeyHash (..)
@@ -94,6 +103,9 @@ import Cardano.Crypto.Hash.Class
     )
 import Cardano.Ledger.Plutus.Language
     ( Language (..)
+    )
+import Cardano.Ledger.State
+    ( BlsKey
     )
 import Cardano.Ledger.TxIn
     ( TxIn (..)
@@ -210,6 +222,18 @@ data MultiEraPredicateFailure
     -- All witness or reference scripts payload must be valid Plutus scripts
     | MalformedScripts
         { malformedScripts :: Set ScriptHash
+        }
+
+    -- Guards required by the transaction or its sub-transactions must all be
+    -- listed in the top-level guards.
+    | MissingRequiredGuards
+        { missingGuards :: Set (Credential Guard)
+        }
+
+    -- Required top-level guards carry a datum if, and only if, they resolve to
+    -- a Plutus script.
+    | MalformedGuardDatums
+        { malformedGuards :: Set (Credential Guard)
         }
 
     ---------------------------------------------------------------------------
@@ -334,6 +358,12 @@ data MultiEraPredicateFailure
         , maximumSize :: Integer
         }
 
+    -- Since Dijkstra, the collateral return output must not use a pointer
+    -- address.
+    | PtrPresentInCollateralReturn
+        { collateralReturn :: TxOutInAnyEra
+        }
+
     ---------------------------------------------------------------------------
     -- Rule → UTXOS
     ---------------------------------------------------------------------------
@@ -442,8 +472,8 @@ data MultiEraPredicateFailure
     -- Rule → POOL
     ---------------------------------------------------------------------------
 
-    -- A stake pool must not issue a retirement certificate too far in the
-    -- future.
+    -- A stake pool must retire after the current epoch, and not too far in
+    -- the future.
     | InvalidStakePoolRetirementEpoch
         { currentEpoch :: EpochNo
         , listedEpoch :: EpochNo
@@ -462,6 +492,36 @@ data MultiEraPredicateFailure
     | StakePoolMetadataHashTooLarge
         { poolId :: KeyHash StakePool
         , computedMetadataHashSize :: Int
+        }
+
+    -- The BLS key of a stake pool registration must come with a valid proof
+    -- of possession.
+    | BlsKeyInvalidProofOfPossession
+        { poolId :: KeyHash StakePool
+        , blsKey :: BlsKey
+        }
+
+    -- A stake pool must not use a VRF key that another stake pool uses.
+    | StakePoolVrfKeyAlreadyRegistered
+        { poolId :: KeyHash StakePool
+        , vrfKeyHash :: VRFVerKeyHash StakePoolVRF
+        }
+
+    ---------------------------------------------------------------------------
+    -- Rule → ENTITIES
+    ---------------------------------------------------------------------------
+
+    -- Withdrawals of the whole batch must not exceed the account balances at
+    -- the start of the batch. Values are (withdrawn, balance).
+    | WithdrawalsExceedingOriginalBalance
+        { excessiveWithdrawals :: Map AccountAddress (Coin, Coin)
+        }
+
+    -- Account balances must fall within the intervals asserted by the
+    -- transaction.
+    | BalancesOutsideAccountBalanceIntervals
+        { checkedAgainst :: BalanceSnapshot
+        , balancesOutsideIntervals :: Map AccountAddress (Coin, AccountBalanceInterval DijkstraEra)
         }
 
     ---------------------------------------------------------------------------
@@ -530,6 +590,14 @@ data MultiEraPredicateFailure
         }
 
     ---------------------------------------------------------------------------
+    -- Rule → MEMPOOL
+    ---------------------------------------------------------------------------
+
+    -- All inputs of the transaction are already spent; it has likely been
+    -- included already.
+    | AllInputsAreSpent
+
+    ---------------------------------------------------------------------------
     -- Quirks
     ---------------------------------------------------------------------------
 
@@ -594,6 +662,8 @@ predicateFailurePriority = \case
 
     InvalidStakePoolRetirementEpoch{} -> 3
     StakePoolCostTooLow{} -> 3
+    BlsKeyInvalidProofOfPossession{} -> 3
+    StakePoolVrfKeyAlreadyRegistered{} -> 3
     ReferenceScriptsTooLarge{} -> 3
     EmptyTreasuryWithdrawal{} -> 3
 
@@ -602,6 +672,7 @@ predicateFailurePriority = \case
     CollateralInputLockedByScript{} -> 4
     UnknownStakePool{} -> 4
     UnknownGovernanceActions{} -> 4
+    AllInputsAreSpent{} -> 4
 
     ScriptIntegrityHashMismatch{} -> 5
 
@@ -619,10 +690,12 @@ predicateFailurePriority = \case
     InvalidSignatures{} -> 9
     MissingSignatures{} -> 9
     MissingCostModels{} -> 9
+    MissingRequiredGuards{} -> 9
 
     MissingRedeemers{} -> 10
     MissingDatums{} -> 10
     MissingScriptWitnesses{} -> 10
+    MalformedGuardDatums{} -> 10
 
     UnableToCreateScriptContext{} -> 11
 
@@ -636,10 +709,13 @@ predicateFailurePriority = \case
     NonAdaValueAsCollateral{} -> 14
     MissingCollateralInputs{} -> 14
     TooManyCollateralInputs{} -> 14
+    PtrPresentInCollateralReturn{} -> 14
 
     IncompleteWithdrawals{} -> 15
     RewardAccountNotEmpty{} -> 15
     ForbiddenWithdrawal{} -> 15
+    WithdrawalsExceedingOriginalBalance{} -> 15
+    BalancesOutsideAccountBalanceIntervals{} -> 15
 
     TotalCollateralMismatch{} -> 16
     DepositMismatch{} -> 16
@@ -657,3 +733,8 @@ predicateFailurePriority = \case
 
     ValueNotConserved{} -> 20
     ValidationTagMismatch{} -> 20
+
+-- | Which account balances an account balance interval was checked against.
+data BalanceSnapshot
+    = BatchStartBalances
+    | TransactionBalances

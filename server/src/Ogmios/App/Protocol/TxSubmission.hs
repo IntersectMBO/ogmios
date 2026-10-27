@@ -54,6 +54,9 @@ import Cardano.Ledger.Core (
     TopTx,
     eraName,
  )
+import Control.Monad.Class.MonadThrow (
+    MonadEvaluate (..),
+ )
 import Control.Monad.Trans.Except (
     Except,
  )
@@ -94,6 +97,7 @@ import Ogmios.Data.Json (
     Json,
     MultiEraDecoder (..),
     ToJSON,
+    jsonToByteString,
  )
 import Ogmios.Data.Ledger.ScriptFailure (
     EvaluateTransactionError (..),
@@ -184,6 +188,8 @@ import Type.Reflection (
 
 import qualified Codec.Json.Rpc as Rpc
 import qualified Data.Aeson as Json
+import qualified Data.Aeson.Encoding as JsonEncoding
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Ouroboros.Consensus.HardFork.Combinator as HF
@@ -195,6 +201,7 @@ mkTxSubmissionClient ::
     forall m block.
     ( MonadSTM m
     , MonadLog m
+    , MonadEvaluate m
     , HasTxId (SerializedTransaction block)
     , block ~ CardanoBlock StandardCrypto
     ) =>
@@ -216,6 +223,14 @@ mkTxSubmissionClient tr defaultWithInternalError TxSubmissionCodecs{..} Executio
   where
     await :: m (TxSubmissionMessage block)
     await = atomically (readTQueue queue)
+
+    -- | Encode eagerly, so that an encoder exception becomes an internal error reply instead of
+    -- surfacing in the websocket send. 'yield' stays outside the handler on purpose.
+    yieldEncoded :: Rpc.ToResponse r -> Json -> m ()
+    yieldEncoded toResponse json =
+        defaultWithInternalError (pure Nothing) yield toResponse
+            (Just . JsonEncoding.unsafeToEncoding . Builder.byteString <$> evaluate (jsonToByteString json))
+            >>= traverse_ yield
 
     isMostRecentEra era =
         T.toLower (toText era) == T.toLower (toText (eraName @(MostRecentEra block)))
@@ -239,28 +254,28 @@ mkTxSubmissionClient tr defaultWithInternalError TxSubmissionCodecs{..} Executio
                                 SubmitFail (ApplyTxErrWrongEra eraMismatch) | isMostRecentEra (ledgerEraName eraMismatch) -> do
                                     case upgradeGenTx transaction of
                                         Left hint -> do
-                                            SubmitTransactionFailedToUpgrade hint
-                                                & toResponse
-                                                & encodeSubmitTransactionResponse
-                                                & yield
+                                            yieldEncoded toResponse $
+                                                SubmitTransactionFailedToUpgrade hint
+                                                    & toResponse
+                                                    & encodeSubmitTransactionResponse
                                             clientStIdle
                                         Right upgradedTx ->
                                             pure $ SendMsgSubmitTx upgradedTx $ \result' -> do
                                                 clearMempoolOnSuccess result'
-                                                mkSubmitTransactionResponse transaction result'
-                                                    & toResponse
-                                                    & encodeSubmitTransactionResponse
-                                                    & yield
+                                                yieldEncoded toResponse $
+                                                    mkSubmitTransactionResponse transaction result'
+                                                        & toResponse
+                                                        & encodeSubmitTransactionResponse
                                                 clientStIdle
                                 _ -> do
                                     -- NOTE: On successful submission, clear our cached
                                     -- mempool to ensure we always use the latest available
                                     -- mempool snapshot during evaluation.
                                     clearMempoolOnSuccess result
-                                    mkSubmitTransactionResponse transaction result
-                                        & toResponse
-                                        & encodeSubmitTransactionResponse
-                                        & yield
+                                    yieldEncoded toResponse $
+                                        mkSubmitTransactionResponse transaction result
+                                            & toResponse
+                                            & encodeSubmitTransactionResponse
                                     clientStIdle
                     MultiEraDecoderErrors errs -> do
                         SubmitTransactionDeserialisationFailure errs
