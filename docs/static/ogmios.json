@@ -4486,6 +4486,200 @@
           , "message": { "type": "string" }
           }
         }
+      , { "title": "SubmitTransactionFailure<MissingRequiredGuards>"
+        , "description": "Some guards required by the transaction or by its sub-transactions are missing from the top-level transaction. Any credential (key hash or script) listed as a required top-level guard must also appear in the 'guards' of the top-level transaction. The field 'data.missingGuards' lists the required credentials that are absent."
+        , "type": "object"
+        , "required": [ "code", "message", "data" ]
+        , "additionalProperties": false
+        , "properties":
+          { "code": { "type": "integer", "enum": [ 3169 ] }
+          , "message": { "type": "string" }
+          , "data":
+            { "type": "object"
+            , "additionalProperties": false
+            , "required": [ "missingGuards" ]
+            , "properties":
+              { "missingGuards":
+                { "type": "array"
+                , "items":
+                  { "type": "object"
+                  , "additionalProperties": false
+                  , "required": [ "from", "credential" ]
+                  , "properties":
+                    { "from": { "$ref": "cardano.json#/definitions/CredentialOrigin" }
+                    , "credential": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      , { "title": "SubmitTransactionFailure<MalformedGuardDatums>"
+        , "description": "Some required top-level guards have a malformed datum. A required guard that resolves to a Plutus script must come with a datum, whereas a guard that is a key hash or resolves to a native script must not have one. The field 'data.malformedGuards' lists the offending credentials."
+        , "type": "object"
+        , "required": [ "code", "message", "data" ]
+        , "additionalProperties": false
+        , "properties":
+          { "code": { "type": "integer", "enum": [ 3170 ] }
+          , "message": { "type": "string" }
+          , "data":
+            { "type": "object"
+            , "additionalProperties": false
+            , "required": [ "malformedGuards" ]
+            , "properties":
+              { "malformedGuards":
+                { "type": "array"
+                , "items":
+                  { "type": "object"
+                  , "additionalProperties": false
+                  , "required": [ "from", "credential" ]
+                  , "properties":
+                    { "from": { "$ref": "cardano.json#/definitions/CredentialOrigin" }
+                    , "credential": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      , { "title": "SubmitTransactionFailure<PointerAddressInCollateralReturn>"
+        , "description": "The collateral return output is sent to a pointer address. Since the Dijkstra era, pointer addresses are no longer allowed in collateral return outputs. The field 'data.collateralReturn' contains the offending output."
+        , "type": "object"
+        , "required": [ "code", "message", "data" ]
+        , "additionalProperties": false
+        , "properties":
+          { "code": { "type": "integer", "enum": [ 3171 ] }
+          , "message": { "type": "string" }
+          , "data":
+            { "type": "object"
+            , "additionalProperties": false
+            , "required": [ "collateralReturn" ]
+            , "properties":
+              { "collateralReturn": { "$ref": "cardano.json#/definitions/TransactionOutput" }
+              }
+            }
+          }
+        }
+      , { "title": "SubmitTransactionFailure<InvalidBlsProofOfPossession>"
+        , "description": "A stake pool registration carries a BLS key with an invalid proof of possession. The proof must show possession of the signing key that matches the BLS verification key. The field 'data.stakePool.id' indicates the stake pool, and 'data.blsKey' contains the key and proof found in the certificate."
+        , "type": "object"
+        , "required": [ "code", "message", "data" ]
+        , "additionalProperties": false
+        , "properties":
+          { "code": { "type": "integer", "enum": [ 3172 ] }
+          , "message": { "type": "string" }
+          , "data":
+            { "type": "object"
+            , "additionalProperties": false
+            , "required": [ "stakePool", "blsKey" ]
+            , "properties":
+              { "stakePool":
+                { "type": "object"
+                , "additionalProperties": false
+                , "required": [ "id" ]
+                , "properties":
+                  { "id": { "$ref": "cardano.json#/definitions/StakePoolId" }
+                  }
+                }
+              , "blsKey": { "$ref": "cardano.json#/definitions/BlsKey" }
+              }
+            }
+          }
+        }
+      , { "title": "SubmitTransactionFailure<AllInputsAreSpent>"
+        , "description": "All inputs of the transaction are already spent. This usually means that the transaction has already been included in the ledger, so there's no need to submit it again."
+        , "type": "object"
+        , "required": [ "code", "message" ]
+        , "additionalProperties": false
+        , "properties":
+          { "code": { "type": "integer", "enum": [ 3173 ] }
+          , "message": { "type": "string" }
+          }
+        }
+      , { "title": "SubmitTransactionFailure<WithdrawalsExceedingBalance>"
+        , "description": "Some withdrawals exceed the balance of their account. A withdrawal may take any amount up to the account balance, but the total withdrawn from an account across the whole batch (the top-level transaction and its sub-transactions) must not exceed the balance at the start of the batch. In legacy mode, only withdrawals from sub-transactions count towards that total. The field 'data.excessiveWithdrawals' lists, for each account, the total withdrawn and the balance at the start of the batch."
+        , "type": "object"
+        , "required": [ "code", "message", "data" ]
+        , "additionalProperties": false
+        , "properties":
+          { "code": { "type": "integer", "enum": [ 3174 ] }
+          , "message": { "type": "string" }
+          , "data":
+            { "type": "object"
+            , "additionalProperties": false
+            , "required": [ "excessiveWithdrawals" ]
+            , "properties":
+              { "excessiveWithdrawals":
+                { "type": "array"
+                , "items":
+                  { "type": "object"
+                  , "additionalProperties": false
+                  , "required": [ "account", "withdrawn", "balance" ]
+                  , "properties":
+                    { "account": { "$ref": "cardano.json#/definitions/RewardAccount" }
+                    , "withdrawn": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+                    , "balance": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      , { "title": "SubmitTransactionFailure<BalancesOutsideIntervals>"
+        , "description": "Some account balances fall outside the intervals asserted by the transaction. An interval has an inclusive lower bound and an exclusive upper bound, or asserts an exact balance. The field 'data.checkedAgainst' tells which balances were checked: 'batchStart' for the balances at the start of the batch, or 'transaction' for the balances seen by the (sub-)transaction that asserts the interval. The field 'data.balancesOutsideIntervals' lists each account with its balance and the interval it doesn't satisfy."
+        , "type": "object"
+        , "required": [ "code", "message", "data" ]
+        , "additionalProperties": false
+        , "properties":
+          { "code": { "type": "integer", "enum": [ 3175 ] }
+          , "message": { "type": "string" }
+          , "data":
+            { "type": "object"
+            , "additionalProperties": false
+            , "required": [ "checkedAgainst", "balancesOutsideIntervals" ]
+            , "properties":
+              { "checkedAgainst":
+                { "type": "string"
+                , "enum": [ "batchStart", "transaction" ]
+                }
+              , "balancesOutsideIntervals":
+                { "type": "array"
+                , "items":
+                  { "type": "object"
+                  , "additionalProperties": false
+                  , "required": [ "account", "balance", "interval" ]
+                  , "properties":
+                    { "account": { "$ref": "cardano.json#/definitions/RewardAccount" }
+                    , "balance": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+                    , "interval":
+                      { "oneOf":
+                        [ { "type": "object"
+                          , "additionalProperties": false
+                          , "required": [ "exact" ]
+                          , "properties":
+                            { "exact": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+                            }
+                          }
+                        , { "type": "object"
+                          , "additionalProperties": false
+                          , "minProperties": 1
+                          , "properties":
+                            { "lowerBound": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+                            , "upperBound": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       , { "title": "SubmitTransactionFailure<UnexpectedMempoolError>"
         , "description": "A transaction was rejected due to custom rules that prevented it from entering the mempool. A justification is given as 'data.error'."
         , "type": "object"

@@ -6,13 +6,19 @@ module Ogmios.Data.Json.Ledger.PredicateFailure where
 
 import Ogmios.Data.Json.Prelude
 
+import Cardano.Ledger.BaseTypes
+    ( Exclusive (..)
+    , Inclusive (..)
+    )
 import Ogmios.Data.Ledger
     ( DiscriminatedEntities (..)
     , TxOutInAnyEra (..)
     , ValueInAnyEra (..)
     )
 import Ogmios.Data.Ledger.PredicateFailure
-    ( ContextErrorInAnyEra (..)
+    ( AccountBalanceInterval (..)
+    , BalanceSnapshot (..)
+    , ContextErrorInAnyEra (..)
     , MultiEraPredicateFailure (..)
     , ScriptPurposeIndexInAnyEra (..)
     , ScriptPurposeItemInAnyEra (..)
@@ -977,6 +983,113 @@ encodePredicateFailure reject = \case
             "Some proposals contain empty treasury withdrawals, which is pointless and a waste of resources."
             Nothing
 
+    MissingRequiredGuards { missingGuards } ->
+        reject (predicateFailureCode 69)
+            "Some guards required by the transaction or by its sub-transactions are missing from the \
+            \top-level transaction. Any credential (key hash or script) listed as a required top-level \
+            \guard must also appear in the 'guards' of the top-level transaction. The field \
+            \'data.missingGuards' lists the required credentials that are absent."
+            (pure $ encodeObject
+                ( "missingGuards" .=
+                    encodeFoldable (encodeObject . Shelley.encodeCredential "credential") missingGuards
+                )
+            )
+
+    MalformedGuardDatums { malformedGuards } ->
+        reject (predicateFailureCode 70)
+            "Some required top-level guards have a malformed datum. A required guard that resolves \
+            \to a Plutus script must come with a datum, whereas a guard that is a key hash or resolves \
+            \to a native script must not have one. The field 'data.malformedGuards' lists the \
+            \offending credentials."
+            (pure $ encodeObject
+                ( "malformedGuards" .=
+                    encodeFoldable (encodeObject . Shelley.encodeCredential "credential") malformedGuards
+                )
+            )
+
+    PtrPresentInCollateralReturn { collateralReturn } ->
+        reject (predicateFailureCode 71)
+            "The collateral return output is sent to a pointer address. Since the Dijkstra era, \
+            \pointer addresses are no longer allowed in collateral return outputs. The field \
+            \'data.collateralReturn' contains the offending output."
+            (pure $ encodeObject
+                ( "collateralReturn" .=
+                    encodeTxOutInAnyEra collateralReturn
+                )
+            )
+
+    BlsKeyInvalidProofOfPossession { poolId, blsKey } ->
+        reject (predicateFailureCode 72)
+            "A stake pool registration carries a BLS key with an invalid proof of possession. The \
+            \proof must show possession of the signing key that matches the BLS verification key. \
+            \The field 'data.stakePool.id' indicates the stake pool, and 'data.blsKey' contains \
+            \the key and proof found in the certificate."
+            (pure $ encodeObject
+                ( "stakePool" .=
+                    encodeSingleton "id" (Shelley.encodePoolId poolId)
+               <> "blsKey" .=
+                    Shelley.encodeBlsKey blsKey
+                )
+            )
+
+    AllInputsAreSpent ->
+        reject (predicateFailureCode 73)
+            "All inputs of the transaction are already spent. This usually means that the \
+            \transaction has already been included in the ledger, so there's no need to submit \
+            \it again."
+            Nothing
+
+    WithdrawalsExceedingOriginalBalance { excessiveWithdrawals } ->
+        reject (predicateFailureCode 74)
+            "Some withdrawals exceed the balance of their account. A withdrawal may take any amount \
+            \up to the account balance, but the total withdrawn from an account across the whole \
+            \batch (the top-level transaction and its sub-transactions) must not exceed the balance \
+            \at the start of the batch. In legacy mode, only withdrawals from sub-transactions count \
+            \towards that total. The field 'data.excessiveWithdrawals' lists, for each account, the \
+            \total withdrawn and the balance at the start of the batch."
+            (pure $ encodeObject
+                ( "excessiveWithdrawals" .=
+                    encodeMapAsList
+                        (\account (withdrawn, balance) -> encodeObject
+                            ( "account" .=
+                                Shelley.encodeRewardAcnt account
+                           <> "withdrawn" .=
+                                encodeCoin withdrawn
+                           <> "balance" .=
+                                encodeCoin balance
+                            )
+                        )
+                        excessiveWithdrawals
+                )
+            )
+
+    BalancesOutsideAccountBalanceIntervals { checkedAgainst, balancesOutsideIntervals } ->
+        reject (predicateFailureCode 75)
+            "Some account balances fall outside the intervals asserted by the transaction. An \
+            \interval has an inclusive lower bound and an exclusive upper bound, or asserts an \
+            \exact balance. The field 'data.checkedAgainst' tells which balances were checked: \
+            \'batchStart' for the balances at the start of the batch, or 'transaction' for the \
+            \balances seen by the (sub-)transaction that asserts the interval. The field \
+            \'data.balancesOutsideIntervals' lists each account with its balance and the interval \
+            \it doesn't satisfy."
+            (pure $ encodeObject
+                ( "checkedAgainst" .=
+                    encodeBalanceSnapshot checkedAgainst
+               <> "balancesOutsideIntervals" .=
+                    encodeMapAsList
+                        (\account (balance, interval) -> encodeObject
+                            ( "account" .=
+                                Shelley.encodeRewardAcnt account
+                           <> "balance" .=
+                                encodeCoin balance
+                           <> "interval" .=
+                                encodeAccountBalanceInterval interval
+                            )
+                        )
+                        balancesOutsideIntervals
+                )
+            )
+
     -- NOTE: This should match the encoding also used for 'EvaluateTransactionResponse' in
     -- Data.Protocol.TxSubmission; hence the code.
     UnableToCreateScriptContext { translationError } ->
@@ -1006,6 +1119,26 @@ encodePredicateFailure reject = \case
             \data-types are modeled. If you ever run into this, please report the issue as you've \
             \likely discoverd a critical bug..."
             Nothing
+
+encodeBalanceSnapshot :: BalanceSnapshot -> Json
+encodeBalanceSnapshot = encodeText . \case
+    BatchStartBalances ->
+        "batchStart"
+    TransactionBalances ->
+        "transaction"
+
+encodeAccountBalanceInterval :: AccountBalanceInterval era -> Json
+encodeAccountBalanceInterval = encodeObject . \case
+    AccountBalanceLowerBound (Inclusive lowerBound) ->
+        "lowerBound" .= encodeCoin lowerBound
+    AccountBalanceUpperBound (Exclusive upperBound) ->
+        "upperBound" .= encodeCoin upperBound
+    AccountBalanceBothBounds (Inclusive lowerBound) (Exclusive upperBound) ->
+        "lowerBound" .= encodeCoin lowerBound
+        <>
+        "upperBound" .= encodeCoin upperBound
+    AccountBalanceExact exact ->
+        "exact" .= encodeCoin exact
 
 encodeTagMismatchDescription :: TagMismatchDescription -> Json
 encodeTagMismatchDescription = encodeText . \case

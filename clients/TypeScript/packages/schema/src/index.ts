@@ -42,7 +42,14 @@ export type Script = Native | Plutus;
 /**
  * A phase-1 monetary script. Timelocks constraints are only supported since Allegra.
  */
-export type ScriptNative = ClauseSignature | ClauseAny | ClauseAll | ClauseSome | ClauseBefore | ClauseAfter;
+export type ScriptNative =
+  | ClauseSignature
+  | ClauseGuard
+  | ClauseAny
+  | ClauseAll
+  | ClauseSome
+  | ClauseBefore
+  | ClauseAfter;
 /**
  * A Blake2b 28-byte hash digest, encoded in base16.
  */
@@ -125,6 +132,10 @@ export type MetadatumDetailedSchema =
  */
 export type VerificationKey = string;
 /**
+ * An Ed25519-BIP32 Byron genesis delegate verification key with chain-code.
+ */
+export type ExtendedVerificationKey = string;
+/**
  * An EdDSA signature.
  */
 export type Signature = string;
@@ -141,10 +152,6 @@ export type AddressAttributes = string;
  */
 export type RedeemerData = string;
 export type BootstrapProtocolId = number;
-/**
- * An Ed25519-BIP32 Byron genesis delegate verification key with chain-code.
- */
-export type ExtendedVerificationKey = string;
 export type GenesisHash = "genesis";
 export type VrfProof = string;
 export type VrfOutput = string;
@@ -220,21 +227,29 @@ export type SubmitTransactionFailure =
   | SubmitTransactionFailureReferenceScriptsTooLarge
   | SubmitTransactionFailureUnknownVoters
   | SubmitTransactionFailureEmptyTreasuryWithdrawal
+  | SubmitTransactionFailureMissingRequiredGuards
+  | SubmitTransactionFailureMalformedGuardDatums
+  | SubmitTransactionFailurePointerAddressInCollateralReturn
+  | SubmitTransactionFailureInvalidBlsProofOfPossession
+  | SubmitTransactionFailureAllInputsAreSpent
+  | SubmitTransactionFailureWithdrawalsExceedingBalance
+  | SubmitTransactionFailureBalancesOutsideIntervals
   | SubmitTransactionFailureUnexpectedMempoolError
   | SubmitTransactionFailureUnrecognizedCertificateType;
-export type Era = "byron" | "shelley" | "allegra" | "mary" | "alonzo" | "babbage" | "conway";
+export type Era = "byron" | "shelley" | "allegra" | "mary" | "alonzo" | "babbage" | "conway" | "dijkstra";
 export type ScriptPurpose =
   | ScriptPurposeSpend
   | ScriptPurposeMint
   | ScriptPurposePublish
   | ScriptPurposeWithdraw
   | ScriptPurposePropose
-  | ScriptPurposeVote;
+  | ScriptPurposeVote
+  | ScriptPurposeGuard;
 /**
  * A Blake2b 28-byte hash digest, encoded in base16.
  */
 export type PolicyId = string;
-export type Language = "plutus:v1" | "plutus:v2" | "plutus:v3";
+export type Language = "plutus:v1" | "plutus:v2" | "plutus:v3" | "plutus:v4";
 export type Utxo = {
   transaction: {
     id: TransactionId;
@@ -659,6 +674,10 @@ export interface ClauseSignature {
   clause: "signature";
   from: DigestBlake2B224;
 }
+export interface ClauseGuard {
+  clause: "guard";
+  from: DigestBlake2B224;
+}
 export interface ClauseAny {
   clause: "any";
   from: ScriptNative[];
@@ -681,7 +700,7 @@ export interface ClauseAfter {
   slot: Slot;
 }
 export interface Plutus {
-  language: "plutus:v1" | "plutus:v2" | "plutus:v3";
+  language: "plutus:v1" | "plutus:v2" | "plutus:v3" | "plutus:v4";
   cbor: string;
 }
 /**
@@ -741,6 +760,7 @@ export interface StakePoolRegistration {
 export interface StakePool {
   id: StakePoolId;
   vrfVerificationKeyHash: DigestBlake2B256;
+  blsKey?: BlsKey;
   owners: DigestBlake2B224[];
   cost: ValueAdaOnly;
   margin: Ratio;
@@ -748,6 +768,13 @@ export interface StakePool {
   rewardAccount: RewardAccount;
   metadata?: Anchor;
   relays: Relay[];
+}
+/**
+ * A BLS12-381 (minimal-signature-size variant) verification key, along with a proof of possession of its signing key.
+ */
+export interface BlsKey {
+  verificationKey: string;
+  proofOfPossession: string;
 }
 export interface Anchor {
   hash: DigestAny;
@@ -1115,7 +1142,7 @@ export interface MetadatumMap {
   v: MetadatumDetailedSchema;
 }
 /**
- * A signatory (EdDSA) for the transaction. The fields 'chainCode' and 'addressAttributes' are only present on bootstrap signatures (when spending from a Byron/Bootstrap address).
+ * A signatory (EdDSA) for the transaction. The fields 'chainCode' and 'addressAttributes' are only present on bootstrap signatures (when spending from a Byron/Bootstrap address). On Byron, the 'key' is an Ed25519-BIP32 XPub (key + chain-code) so the chain-code is carried inline; on Shelley and later it is a plain Ed25519 key with the chain-code in the separate 'chainCode' field.
  */
 export interface Signatory {
   key: VerificationKey | ExtendedVerificationKey;
@@ -1129,7 +1156,7 @@ export interface Redeemer {
   validator: RedeemerPointer;
 }
 export interface RedeemerPointer {
-  purpose: "spend" | "mint" | "publish" | "withdraw" | "vote" | "propose";
+  purpose: "spend" | "mint" | "publish" | "withdraw" | "vote" | "propose" | "guard";
   index: UInt64;
 }
 /**
@@ -1195,7 +1222,7 @@ export interface BootstrapVote {
 }
 export interface BlockPraos {
   type: "praos";
-  era: "shelley" | "allegra" | "mary" | "alonzo" | "babbage" | "conway";
+  era: "shelley" | "allegra" | "mary" | "alonzo" | "babbage" | "conway" | "dijkstra";
   id: DigestBlake2B256;
   ancestor: DigestBlake2B256 | GenesisHash;
   nonce?: CertifiedVrf;
@@ -1408,6 +1435,10 @@ export interface ScriptPurposePropose {
 export interface ScriptPurposeVote {
   purpose: "vote";
   issuer: VoterGenesisDelegate | VoterConstitutionalCommittee | VoterDelegateRepresentative | VoterStakePoolOperator;
+}
+export interface ScriptPurposeGuard {
+  purpose: "guard";
+  script: DigestBlake2B224;
 }
 /**
  * Extraneous (non-required) redeemers found in the transaction. There are some redeemers that aren't pointing to any script. This could be because you've left some orphan redeemer behind, because they are pointing at the wrong thing or because you forgot to include their associated validator. Either way, the field 'data.extraneousRedeemers' lists the different orphan redeemer pointers.
@@ -2049,6 +2080,98 @@ export interface SubmitTransactionFailureUnknownVoters {
 export interface SubmitTransactionFailureEmptyTreasuryWithdrawal {
   code: 3168;
   message: string;
+}
+/**
+ * Some guards required by the transaction or by its sub-transactions are missing from the top-level transaction. Any credential (key hash or script) listed as a required top-level guard must also appear in the 'guards' of the top-level transaction. The field 'data.missingGuards' lists the required credentials that are absent.
+ */
+export interface SubmitTransactionFailureMissingRequiredGuards {
+  code: 3169;
+  message: string;
+  data: {
+    missingGuards: {
+      from: CredentialOrigin;
+      credential: DigestBlake2B224;
+    }[];
+  };
+}
+/**
+ * Some required top-level guards have a malformed datum. A required guard that resolves to a Plutus script must come with a datum, whereas a guard that is a key hash or resolves to a native script must not have one. The field 'data.malformedGuards' lists the offending credentials.
+ */
+export interface SubmitTransactionFailureMalformedGuardDatums {
+  code: 3170;
+  message: string;
+  data: {
+    malformedGuards: {
+      from: CredentialOrigin;
+      credential: DigestBlake2B224;
+    }[];
+  };
+}
+/**
+ * The collateral return output is sent to a pointer address. Since the Dijkstra era, pointer addresses are no longer allowed in collateral return outputs. The field 'data.collateralReturn' contains the offending output.
+ */
+export interface SubmitTransactionFailurePointerAddressInCollateralReturn {
+  code: 3171;
+  message: string;
+  data: {
+    collateralReturn: TransactionOutput;
+  };
+}
+/**
+ * A stake pool registration carries a BLS key with an invalid proof of possession. The proof must show possession of the signing key that matches the BLS verification key. The field 'data.stakePool.id' indicates the stake pool, and 'data.blsKey' contains the key and proof found in the certificate.
+ */
+export interface SubmitTransactionFailureInvalidBlsProofOfPossession {
+  code: 3172;
+  message: string;
+  data: {
+    stakePool: {
+      id: StakePoolId;
+    };
+    blsKey: BlsKey;
+  };
+}
+/**
+ * All inputs of the transaction are already spent. This usually means that the transaction has already been included in the ledger, so there's no need to submit it again.
+ */
+export interface SubmitTransactionFailureAllInputsAreSpent {
+  code: 3173;
+  message: string;
+}
+/**
+ * Some withdrawals exceed the balance of their account. A withdrawal may take any amount up to the account balance, but the total withdrawn from an account across the whole batch (the top-level transaction and its sub-transactions) must not exceed the balance at the start of the batch. In legacy mode, only withdrawals from sub-transactions count towards that total. The field 'data.excessiveWithdrawals' lists, for each account, the total withdrawn and the balance at the start of the batch.
+ */
+export interface SubmitTransactionFailureWithdrawalsExceedingBalance {
+  code: 3174;
+  message: string;
+  data: {
+    excessiveWithdrawals: {
+      account: RewardAccount;
+      withdrawn: ValueAdaOnly;
+      balance: ValueAdaOnly;
+    }[];
+  };
+}
+/**
+ * Some account balances fall outside the intervals asserted by the transaction. An interval has an inclusive lower bound and an exclusive upper bound, or asserts an exact balance. The field 'data.checkedAgainst' tells which balances were checked: 'batchStart' for the balances at the start of the batch, or 'transaction' for the balances seen by the (sub-)transaction that asserts the interval. The field 'data.balancesOutsideIntervals' lists each account with its balance and the interval it doesn't satisfy.
+ */
+export interface SubmitTransactionFailureBalancesOutsideIntervals {
+  code: 3175;
+  message: string;
+  data: {
+    checkedAgainst: "batchStart" | "transaction";
+    balancesOutsideIntervals: {
+      account: RewardAccount;
+      balance: ValueAdaOnly;
+      interval:
+        | {
+            exact: ValueAdaOnly;
+          }
+        | {
+            lowerBound?: ValueAdaOnly;
+            upperBound?: ValueAdaOnly;
+          };
+    }[];
+  };
 }
 /**
  * A transaction was rejected due to custom rules that prevented it from entering the mempool. A justification is given as 'data.error'.
@@ -2949,6 +3072,7 @@ export interface QueryLedgerStateStakePoolsResponse {
 export interface StakePoolView {
   id: StakePoolId;
   vrfVerificationKeyHash?: DigestBlake2B256;
+  blsKey?: BlsKey;
   owners?: DigestBlake2B224[];
   cost?: ValueAdaOnly;
   margin?: Ratio;

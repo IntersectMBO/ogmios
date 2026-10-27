@@ -319,6 +319,12 @@ connectHealthCheckClient tr embed (HealthCheckClient clients) = do
                 , "it runs on a different network!"
                 , hint
                 ]
+        HandshakeError (Handshake.VersionMismatch _ _) ->
+            throwIO $ HandshakeException $ unwords
+                [ "Unable to establish the connection with the cardano-node:"
+                , "it does not offer node-to-client version 23, which this Ogmios requires."
+                , "Use a more recent cardano-node."
+                ]
         e ->
             throwIO e
       where

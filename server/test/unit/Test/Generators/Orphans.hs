@@ -37,6 +37,8 @@ import qualified Test.Cardano.Ledger.Alonzo.Arbitrary as Ledger
 
 import Test.Cardano.Ledger.Conway.Arbitrary
     ()
+import Test.Cardano.Ledger.Dijkstra.Arbitrary
+    ()
 
 instance Arbitrary ScriptPurposeIndexInAnyEra where
     arbitrary = oneof

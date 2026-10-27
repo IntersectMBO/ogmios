@@ -160,7 +160,7 @@
         }
       , "era":
         { "type": "string"
-        , "enum": [ "shelley", "allegra", "mary", "alonzo", "babbage", "conway" ]
+        , "enum": [ "shelley", "allegra", "mary", "alonzo", "babbage", "conway", "dijkstra" ]
         }
       , "id": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 256>" }
       , "ancestor":
@@ -205,6 +205,31 @@
     , "description": "A block number, the i-th block to be minted is number i."
     , "minimum": 0
     , "maximum": 18446744073709552999
+    }
+
+  , "BlsKey":
+    { "title": "BlsKey"
+    , "description": "A BLS12-381 (minimal-signature-size variant) verification key, along with a proof of possession of its signing key."
+    , "type": "object"
+    , "additionalProperties": false
+    , "required":
+      [ "verificationKey"
+      , "proofOfPossession"
+      ]
+    , "properties":
+      { "verificationKey":
+        { "type": "string"
+        , "contentEncoding": "base16"
+        , "minLength": 192
+        , "maxLength": 192
+        }
+      , "proofOfPossession":
+        { "type": "string"
+        , "contentEncoding": "base16"
+        , "minLength": 96
+        , "maxLength": 96
+        }
+      }
     }
 
   , "BootstrapProtocolUpdate":
@@ -1032,7 +1057,7 @@
   , "Era":
     { "title": "Era"
     , "type": "string"
-    , "enum": [ "byron", "shelley", "allegra", "mary", "alonzo", "babbage", "conway" ]
+    , "enum": [ "byron", "shelley", "allegra", "mary", "alonzo", "babbage", "conway", "dijkstra" ]
     }
 
   , "EraWithGenesis":
@@ -1984,6 +2009,9 @@
       , "vrfVerificationKeyHash":
         { "$ref": "cardano.json#/definitions/Digest<Blake2b, 256>"
         }
+      , "blsKey":
+        { "$ref": "cardano.json#/definitions/BlsKey"
+        }
       , "owners":
         { "type": "array"
         , "items":
@@ -2038,6 +2066,9 @@
         }
       , "vrfVerificationKeyHash":
         { "$ref": "cardano.json#/definitions/Digest<Blake2b, 256>"
+        }
+      , "blsKey":
+        { "$ref": "cardano.json#/definitions/BlsKey"
         }
       , "owners":
         { "type": "array"
@@ -2294,7 +2325,7 @@
     , "properties":
       { "purpose":
         { "type": "string"
-        , "enum": [ "spend", "mint", "publish", "withdraw", "vote", "propose" ]
+        , "enum": [ "spend", "mint", "publish", "withdraw", "vote", "propose", "guard" ]
         }
       , "index":
         { "$ref": "cardano.json#/definitions/UInt64"
@@ -2461,6 +2492,20 @@
           { "clause":
             { "type": "string"
             , "enum": [ "signature" ]
+            }
+          , "from":
+            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+            }
+          }
+        }
+      , { "type": "object"
+        , "title": "Clause<Guard>"
+        , "additionalProperties": false
+        , "required": [ "clause", "from" ]
+        , "properties":
+          { "clause":
+            { "type": "string"
+            , "enum": [ "guard" ]
             }
           , "from":
             { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
@@ -2635,6 +2680,18 @@
           , "issuer":
             { "$ref": "cardano.json#/definitions/GovernanceVoter"
             }
+          }
+        }
+      , { "title": "ScriptPurpose<Guard>"
+        , "type": "object"
+        , "additionalProperties": false
+        , "required": [ "purpose", "script" ]
+        , "properties":
+          { "purpose":
+            { "type": "string"
+            , "enum": [ "guard" ]
+            }
+          , "script": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
           }
         }
       ]

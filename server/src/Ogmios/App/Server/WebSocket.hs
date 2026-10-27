@@ -336,6 +336,7 @@ withOuroborosClients
     :: forall m a.
         ( MonadAsync m
         , MonadDisk m
+        , MonadEvaluate m
         , MonadLink m
         , MonadLog m
         , MonadMetrics m

@@ -1,1 +1,1 @@
-{"jsonrpc":"2.0","method":"submitTransaction","error":{"code":3998,"message":"Unrecognized certificate type. This error is a placeholder due to how internal data-types are modeled. If you ever run into this, please report the issue as you've likely discoverd a critical bug..."},"id":"vZPTGdZkmCYu"}
+{"jsonrpc":"2.0","method":"submitTransaction","error":{"code":3173,"message":"All inputs of the transaction are already spent. This usually means that the transaction has already been included in the ledger, so there's no need to submit it again."},"id":"vZPTGdZkmCYu"}

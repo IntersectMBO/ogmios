@@ -18,6 +18,10 @@ import Cardano.Ledger.Alonzo.Genesis
 import Cardano.Ledger.Api
     ( TransactionScriptFailure (..)
     )
+import Cardano.Ledger.BaseTypes
+    ( Mismatch (..)
+    , StrictMaybe (SJust)
+    )
 import Cardano.Ledger.Coin
     ( Coin (..)
     )
@@ -44,6 +48,10 @@ import Cardano.Ledger.Babbage
     )
 import Cardano.Ledger.Conway
     ( ApplyTxError (ConwayApplyTxError)
+    )
+import Cardano.Ledger.Dijkstra
+    ( ApplyTxError (DijkstraApplyTxError)
+    , DijkstraEra
     )
 import Cardano.Ledger.Mary
     ( ApplyTxError (MaryApplyTxError)
@@ -76,7 +84,7 @@ import Data.Type.Equality
     )
 import Cardano.Ledger.State
     ( ChainAccountState (..)
-    , StakePoolParams
+    , StakePoolParams (..)
     )
 import Ogmios.Data.Json.Query
     ( DRepSummary (..)
@@ -183,6 +191,8 @@ import Test.Generators.Orphans
 
 import qualified Data.Aeson as Json
 import qualified Data.Map as Map
+import qualified Data.Map.NonEmpty as NEMap
+import qualified Data.Set.NonEmpty as NESet
 
 import qualified Ouroboros.Network.Point as Point
 
@@ -190,6 +200,7 @@ import qualified Cardano.Ledger.Api.Governance as Ledger
 import qualified Cardano.Ledger.Block as Ledger
 import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.DRep as Ledger
+import qualified Cardano.Ledger.Dijkstra.Rules as Di
 import qualified Cardano.Ledger.State as Ledger
 
 import qualified Cardano.Ledger.Api.State.Query as Ledger
@@ -199,7 +210,6 @@ import qualified Cardano.Ledger.TxIn as Ledger
 
 -- FIXME
 -- Needed with ouroboros-cardano-consensus==0.18.0.0. Otherwise, use the following:
-import qualified Ouroboros.Consensus.Shelley.Ledger.Query.Types as Consensus
 
 genBlock :: Gen Block
 genBlock = oneof
@@ -335,7 +345,39 @@ genHardForkApplyTxErr = frequency
     , ( 10, ApplyTxErrAlonzo . AlonzoApplyTxError . pure <$> arbitrary )
     , ( 25, ApplyTxErrBabbage . BabbageApplyTxError . pure <$> arbitrary )
     , ( 25, ApplyTxErrConway . ConwayApplyTxError . pure <$> arbitrary )
+    , ( 25, ApplyTxErrDijkstra . DijkstraApplyTxError . pure <$> genDijkstraMempoolFailure )
     ]
+
+-- | The ledger's own generator rarely yields the newest failures; add them explicitly.
+genDijkstraMempoolFailure :: Gen (Di.DijkstraMempoolPredFailure DijkstraEra)
+genDijkstraMempoolFailure = frequency
+    [ (6, arbitrary)
+    , (3, inLedger . Di.DijkstraUtxowFailure . Di.MissingRequiredGuards <$> genNonEmptySet)
+    , (3, inLedger . Di.DijkstraUtxowFailure . Di.MalformedGuardDatums <$> genNonEmptySet)
+    , (3, inLedger . Di.DijkstraUtxowFailure . Di.UtxoFailure . Di.PtrPresentInCollateralReturn <$> arbitrary)
+    , (3, inLedger . Ledger.injectFailure @"LEDGER" <$> (Di.BlsKeyInvalidProofOfPossession <$> arbitrary <*> arbitrary))
+    , (3, pure Di.AllInputsAreSpent)
+    , (3, inLedger . Di.DijkstraEntitiesFailure . Di.WithdrawalAmountsExceedingOriginalBalance
+        <$> genNonEmptyMap (Mismatch <$> arbitrary <*> arbitrary))
+    , (3, inLedger . Di.DijkstraEntitiesFailure . Di.BalancesOutsideAccountBalanceIntervals
+        <$> genNonEmptyMap ((,) <$> arbitrary <*> arbitrary))
+    , (3, inLedger . Di.DijkstraEntitiesFailure . Di.BalancesOutsideStartingAccountBalanceIntervals
+        <$> genNonEmptyMap ((,) <$> arbitrary <*> arbitrary))
+    ]
+  where
+    inLedger = Di.LedgerFailure
+
+    genNonEmptySet :: (Arbitrary a, Ord a) => Gen (NESet.NonEmptySet a)
+    genNonEmptySet = do
+        x <- arbitrary
+        xs <- reasonablySized arbitrary
+        pure $ fromMaybe (NESet.singleton x) (NESet.fromFoldable (x : xs))
+
+    genNonEmptyMap :: (Arbitrary k, Ord k) => Gen v -> Gen (NEMap.NonEmptyMap k v)
+    genNonEmptyMap genV = do
+        x <- (,) <$> arbitrary <*> genV
+        xs <- reasonablySized (listOf ((,) <$> arbitrary <*> genV))
+        pure $ fromMaybe (uncurry NEMap.singleton x) (NEMap.fromFoldable (x : xs))
 
 genEvaluateTransactionResponse :: Gen (EvaluateTransactionResponse Block)
 genEvaluateTransactionResponse = frequency
@@ -364,6 +406,7 @@ genContextError = oneof
     [ ContextErrorInAnyEra . (AlonzoBasedEraAlonzo,) <$> arbitrary
     , ContextErrorInAnyEra . (AlonzoBasedEraBabbage,) <$> arbitrary
     , ContextErrorInAnyEra . (AlonzoBasedEraConway,) <$> arbitrary
+    , ContextErrorInAnyEra . (AlonzoBasedEraDijkstra,) <$> arbitrary
     ]
 
 genPreAlonzoEra :: Gen Text
@@ -921,22 +964,46 @@ genAccountStateResult _ = frequency
   where
     genAccountState = ChainAccountState <$> arbitrary <*> arbitrary
 
+-- | The ledger's own generator never sets the BLS key; only Dijkstra supports it.
+genBlsKey
+    :: forall era. Typeable era
+    => StakePoolParams era
+    -> Gen (StakePoolParams era)
+genBlsKey params =
+    case testEquality (typeRep @era) (typeRep @DijkstraEra) of
+        Just Refl{} ->
+            oneof
+                [ pure params
+                , (\key -> params { sppBlsKey = SJust key }) <$> arbitrary
+                ]
+        Nothing ->
+            pure params
+
+-- | Mostly non-empty, so that samples exercise the per-pool encoding.
+genNonEmptyMap :: (Arbitrary k, Arbitrary v, Ord k) => Gen (Map k v)
+genNonEmptyMap = frequency
+    [ (1, pure mempty)
+    , (9, Map.fromList <$> reasonablySized (listOf1 arbitrary))
+    ]
+
 genPoolParametersResult
-    :: forall crypto. (crypto ~ StandardCrypto)
-    => Proxy (QueryResult crypto (Map (Ledger.KeyHash StakePool) (Maybe StakePoolParams, StrictMaybe Coin)))
-    -> Gen (QueryResult crypto (Map (Ledger.KeyHash StakePool) (Maybe StakePoolParams, StrictMaybe Coin)))
-genPoolParametersResult _ = frequency
+    :: forall crypto era. (crypto ~ StandardCrypto, Typeable era)
+    => Proxy era
+    -> Proxy (QueryResult crypto (Map (Ledger.KeyHash StakePool) (Maybe (StakePoolParams era), StrictMaybe Coin)))
+    -> Gen (QueryResult crypto (Map (Ledger.KeyHash StakePool) (Maybe (StakePoolParams era), StrictMaybe Coin)))
+genPoolParametersResult _ _ = frequency
     [ (1, Left <$> genMismatchEraInfo)
-    , (10, Right <$> arbitrary)
+    , (10, Right <$> (genNonEmptyMap >>= traverse (\(mparams, stake) -> (, stake) <$> traverse genBlsKey mparams)))
     ]
 
 genPoolParametersResultNoStake
-    :: forall crypto. (crypto ~ StandardCrypto)
-    => Proxy (QueryResult crypto (Map (Ledger.KeyHash StakePool) StakePoolParams))
-    -> Gen (QueryResult crypto (Map (Ledger.KeyHash StakePool) StakePoolParams))
-genPoolParametersResultNoStake _ = frequency
+    :: forall crypto era. (crypto ~ StandardCrypto, Typeable era)
+    => Proxy era
+    -> Proxy (QueryResult crypto (Map (Ledger.KeyHash StakePool) (StakePoolParams era)))
+    -> Gen (QueryResult crypto (Map (Ledger.KeyHash StakePool) (StakePoolParams era)))
+genPoolParametersResultNoStake _ _ = frequency
     [ (1, Left <$> genMismatchEraInfo)
-    , (10, Right <$> arbitrary)
+    , (10, Right <$> (genNonEmptyMap >>= traverse genBlsKey))
     ]
 
 

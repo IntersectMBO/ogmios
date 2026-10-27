@@ -15,6 +15,15 @@ import Data.Maybe.Strict
 import Cardano.Ledger.Address
     ( unWithdrawals
     )
+import Cardano.Ledger.Alonzo.Scripts
+    ( OrdExUnits (..)
+    )
+import Cardano.Ledger.Core
+    ( EraRule
+    )
+import Control.State.Transition
+    ( STS (..)
+    )
 import Ogmios.Data.Ledger.PredicateFailure
     ( DiscriminatedEntities (..)
     , MultiEraPredicateFailure (..)
@@ -37,6 +46,7 @@ import Cardano.Ledger.BaseTypes
     , mismatchSupplied
     )
 import qualified Cardano.Ledger.Conway.Rules as Cn
+import qualified Cardano.Ledger.Shelley.Rules as Sh
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Map.NonEmpty as NEMap
@@ -50,7 +60,7 @@ encodeLedgerFailure = \case
     Cn.ConwayUtxowFailure e ->
         encodeUtxowFailure e
     Cn.ConwayCertsFailure e ->
-        encodeCertsFailure e
+        encodeCertsFailure encodePoolFailure encodeGovCertFailure e
     Cn.ConwayGovFailure e ->
         encodeGovFailure e
     Cn.ConwayWdrlNotDelegatedToDRep ((Set.fromList . toList) -> marginalizedCredentials) ->
@@ -108,42 +118,7 @@ encodeGovFailure = \case
             { alreadyRetiredMembers = Map.keysSet (NEMap.toMap members)
             }
     Cn.InvalidPrevGovActionId proposal ->
-        InvalidPreviousGovernanceAction $
-            case Ledger.pProcGovAction proposal of
-                Ledger.ParameterChange actionId _ _guardrail ->
-                    [ ( Ledger.pProcAnchor proposal
-                      , Ledger.PParamUpdatePurpose
-                      , Ledger.unGovPurposeId <$> actionId
-                      )
-                    ]
-                Ledger.HardForkInitiation actionId _ ->
-                    [ ( Ledger.pProcAnchor proposal
-                      , Ledger.HardForkPurpose
-                      , Ledger.unGovPurposeId <$> actionId
-                      )
-                    ]
-                Ledger.UpdateCommittee actionId _ _ _ ->
-                    [ ( Ledger.pProcAnchor proposal
-                      , Ledger.CommitteePurpose
-                      , Ledger.unGovPurposeId <$> actionId
-                      )
-                    ]
-                Ledger.NoConfidence actionId ->
-                    [ ( Ledger.pProcAnchor proposal
-                      , Ledger.CommitteePurpose
-                      , Ledger.unGovPurposeId <$> actionId
-                      )
-                    ]
-                Ledger.NewConstitution actionId _ ->
-                    [ ( Ledger.pProcAnchor proposal
-                      , Ledger.ConstitutionPurpose
-                      , Ledger.unGovPurposeId <$> actionId
-                      )
-                    ]
-                Ledger.TreasuryWithdrawals _withdrawals _guardrail ->
-                    []
-                Ledger.InfoAction ->
-                    []
+        encodeInvalidPrevGovActionId proposal
     Cn.VotingOnExpiredGovAction (toList -> voters) ->
         VotingOnExpiredActions voters
     Cn.ProposalCantFollow _ (Mismatch proposedVersion currentVersion) ->
@@ -167,28 +142,78 @@ encodeGovFailure = \case
             { unknownVoters = Ledger.CommitteeVoter <$> toList voters
             }
 
-encodeCertsFailure
-    :: Cn.ConwayCertsPredFailure ConwayEra
+encodeInvalidPrevGovActionId
+    :: Ledger.ProposalProcedure era
     -> MultiEraPredicateFailure
-encodeCertsFailure = \case
-    Cn.WithdrawalsNotInRewardsCERTS ws ->
-        IncompleteWithdrawals { withdrawals = unWithdrawals ws }
+encodeInvalidPrevGovActionId proposal =
+    InvalidPreviousGovernanceAction $
+        case Ledger.pProcGovAction proposal of
+            Ledger.ParameterChange actionId _ _guardrail ->
+                [ ( Ledger.pProcAnchor proposal
+                  , Ledger.PParamUpdatePurpose
+                  , Ledger.unGovPurposeId <$> actionId
+                  )
+                ]
+            Ledger.HardForkInitiation actionId _ ->
+                [ ( Ledger.pProcAnchor proposal
+                  , Ledger.HardForkPurpose
+                  , Ledger.unGovPurposeId <$> actionId
+                  )
+                ]
+            Ledger.UpdateCommittee actionId _ _ _ ->
+                [ ( Ledger.pProcAnchor proposal
+                  , Ledger.CommitteePurpose
+                  , Ledger.unGovPurposeId <$> actionId
+                  )
+                ]
+            Ledger.NoConfidence actionId ->
+                [ ( Ledger.pProcAnchor proposal
+                  , Ledger.CommitteePurpose
+                  , Ledger.unGovPurposeId <$> actionId
+                  )
+                ]
+            Ledger.NewConstitution actionId _ ->
+                [ ( Ledger.pProcAnchor proposal
+                  , Ledger.ConstitutionPurpose
+                  , Ledger.unGovPurposeId <$> actionId
+                  )
+                ]
+            Ledger.TreasuryWithdrawals _withdrawals _guardrail ->
+                []
+            Ledger.InfoAction ->
+                []
+
+encodeCertsFailure
+    :: forall era.
+        ( PredicateFailure (EraRule "CERT" era) ~ Cn.ConwayCertPredFailure era
+        , PredicateFailure (EraRule "DELEG" era) ~ Cn.ConwayDelegPredFailure era
+        )
+    => (PredicateFailure (EraRule "POOL" era) -> MultiEraPredicateFailure)
+    -> (PredicateFailure (EraRule "GOVCERT" era) -> MultiEraPredicateFailure)
+    -> Cn.ConwayCertsPredFailure era
+    -> MultiEraPredicateFailure
+encodeCertsFailure encodePoolFailureInEra encodeGovCertFailureInEra = \case
     Cn.CertFailure e ->
-        encodeCertFailure e
+        encodeCertFailure encodePoolFailureInEra encodeGovCertFailureInEra e
 
 encodeCertFailure
-    :: Cn.ConwayCertPredFailure ConwayEra
+    :: forall era.
+        ( PredicateFailure (EraRule "DELEG" era) ~ Cn.ConwayDelegPredFailure era
+        )
+    => (PredicateFailure (EraRule "POOL" era) -> MultiEraPredicateFailure)
+    -> (PredicateFailure (EraRule "GOVCERT" era) -> MultiEraPredicateFailure)
+    -> Cn.ConwayCertPredFailure era
     -> MultiEraPredicateFailure
-encodeCertFailure = \case
+encodeCertFailure encodePoolFailureInEra encodeGovCertFailureInEra = \case
     Cn.DelegFailure e ->
         encodeDelegFailure e
     Cn.PoolFailure e ->
-        encodePoolFailure e
+        encodePoolFailureInEra e
     Cn.GovCertFailure e ->
-        encodeGovCertFailure e
+        encodeGovCertFailureInEra e
 
 encodeDelegFailure
-    :: Cn.ConwayDelegPredFailure ConwayEra
+    :: Cn.ConwayDelegPredFailure era
     -> MultiEraPredicateFailure
 encodeDelegFailure = \case
     -- NOTE: The discarded coin value here refers to the deposit as set in the
@@ -196,7 +221,7 @@ encodeDelegFailure = \case
     -- expected one.
     Cn.IncorrectDepositDELEG providedDeposit -> -- !Coin
         DepositMismatch { providedDeposit, expectedDeposit = SNothing }
-    Cn.StakeKeyRegisteredDELEG knownCredential ->
+    Cn.DelegAccountAlreadyRegistered (Sh.AccountAlreadyRegistered knownCredential) ->
         StakeCredentialAlreadyRegistered { knownCredential }
     Cn.StakeKeyNotRegisteredDELEG unknownCredential  ->
         StakeCredentialNotRegistered { unknownCredential }
@@ -242,7 +267,7 @@ encodeUtxoFailure
     -> MultiEraPredicateFailure
 encodeUtxoFailure = \case
     Cn.UtxosFailure e ->
-        encodeUtxosFailure e
+        encodeUtxosFailure AlonzoBasedEraConway e
     Cn.BadInputsUTxO inputs ->
         UnknownUtxoReference (NESet.toSet inputs)
     Cn.OutsideValidityIntervalUTxO validityInterval currentSlot ->
@@ -295,7 +320,7 @@ encodeUtxoFailure = \case
             { maximumCollateralInputs = fromIntegral maximumCollateralInputs
             , countedCollateralInputs = fromIntegral countedCollateralInputs
             }
-    Cn.ExUnitsTooBigUTxO (Mismatch providedExUnits maximumExUnits) ->
+    Cn.ExUnitsTooBigUTxO (Mismatch (OrdExUnits providedExUnits) (OrdExUnits maximumExUnits)) ->
         ExecutionUnitsTooLarge { maximumExUnits, providedExUnits }
     Cn.IncorrectTotalCollateralField computedTotalCollateral declaredTotalCollateral ->
         TotalCollateralMismatch { computedTotalCollateral, declaredTotalCollateral }
@@ -313,13 +338,17 @@ encodeUtxoFailure = \case
     era = ShelleyBasedEraConway
 
 encodeUtxosFailure
-    :: Cn.ConwayUtxosPredFailure ConwayEra
+    :: forall era.
+        ( Era era
+        )
+    => AlonzoBasedEra era
+    -> Cn.ConwayUtxosPredFailure era
     -> MultiEraPredicateFailure
-encodeUtxosFailure = \case
+encodeUtxosFailure era = \case
     Cn.ValidationTagMismatch validationTag mismatchReason ->
         ValidationTagMismatch { validationTag, mismatchReason }
     Cn.CollectErrors errors ->
-        pickPredicateFailure (encodeCollectErrors AlonzoBasedEraConway (toList errors))
+        pickPredicateFailure (encodeCollectErrors era (toList errors))
 
 encodeUtxowFailure
     :: Cn.ConwayUtxowPredFailure ConwayEra
