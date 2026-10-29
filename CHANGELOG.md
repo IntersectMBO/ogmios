@@ -7,6 +7,39 @@ pre: "<b>6. </b>"
 math: true
 ---
 
+### [Unreleased]
+
+#### Added
+
+- Stake pools returned by `queryLedgerState/stakePools`, and stake pools listed in the genesis configuration, can carry an optional `blsKey` with a `verificationKey` and a `proofOfPossession`. It is present only for pools that registered a BLS key (Dijkstra).
+
+- Evaluation failures now report "Unexpected failure while building the script context: ..." when the ledger cannot build a script context for a transaction, and, in the Dijkstra era, "Couldn't find the script executed for ..." when a redeemer has no matching script.
+
+- New transaction submission errors in the Dijkstra era:
+  - [`MissingRequiredGuards`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3169/MissingRequiredGuards) (`code=3169`) when the transaction or one of its sub-transactions requires guards that the top-level transaction does not list in its guards. `data.missingGuards` lists them.
+  - [`MalformedGuardDatums`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3170/MalformedGuardDatums) (`code=3170`) when a required top-level guard has the wrong datum: a guard that resolves to a Plutus script needs a datum, and a key hash or native script guard must not have one. `data.malformedGuards` lists the guards.
+  - [`PointerAddressInCollateralReturn`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3171/PointerAddressInCollateralReturn) (`code=3171`) when the collateral return output pays to a pointer address, which the Dijkstra era no longer allows. `data.collateralReturn` holds the output.
+  - [`InvalidBlsProofOfPossession`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3172/InvalidBlsProofOfPossession) (`code=3172`) when a stake pool registration carries a BLS key with an invalid proof of possession. The error gives the pool id and the key.
+  - [`AllInputsAreSpent`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3173/AllInputsAreSpent) (`code=3173`) when all inputs of the transaction are already spent, which usually means that the transaction is already on chain.
+  - [`WithdrawalsExceedingBalance`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3174/WithdrawalsExceedingBalance) (`code=3174`) when the total withdrawn from an account across the batch is more than the account balance at the start of the batch. For each account, the error gives the amount withdrawn and the balance.
+  - [`BalancesOutsideIntervals`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3175/BalancesOutsideIntervals) (`code=3175`) when an account balance does not satisfy an account balance interval that the transaction asserts. For each account, the error gives the balance and the interval, and `data.checkedAgainst` tells whether the check used the balances at the start of the batch or the balances seen by the transaction.
+
+#### Changed
+
+- **⚠️ BREAKING-CHANGE ⚠️**: Ogmios now requires node-to-client version 23, which cardano-node 10.7.1 and later offer. A cardano-node that does not offer it is refused at the handshake, and Ogmios stops with an error saying so instead of a raw handshake protocol error.
+
+- In the Dijkstra era, the evaluation error for a pointer address says whether it was found in an input ("Found inputs locked by a (legacy) pointer address") or in an output ("Found outputs to a (legacy) pointer address"). It always said outputs before.
+
+- Bump dependencies to the latest cardano-ledger, ouroboros-consensus and ouroboros-network releases.
+
+#### Fixed
+
+- A failure while encoding the response of `submitTransaction` now returns a JSON-RPC internal error to the client. Before, the websocket connection was closed with no reply.
+
+- In the Dijkstra era, `submitTransaction` now reports why the ledger rejected a transaction, with the same errors as in earlier eras. Before, a Dijkstra rejection closed the websocket connection with no reply. A failure inside a sub-transaction gets the same error as the same failure in a top-level transaction, and the error does not say which sub-transaction failed.
+
+- The JSON schema now lists `dijkstra` as an era name where Ogmios can return it, such as the `era` of a block and the eras in an era mismatch error. The schema also describes the `guard` clause of native scripts and the `guard` script purpose, which Dijkstra transactions can contain. The `guard` purpose appears in redeemer pointers and in the list of missing redeemers. Before, such responses did not match the schema.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added

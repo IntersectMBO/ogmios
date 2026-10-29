@@ -13,6 +13,26 @@ module Ogmios.Data.JsonSpec (
 
 import Ogmios.Prelude
 
+import Cardano.Ledger.Api (
+    AsItem,
+    PlutusPurpose,
+    TxCert,
+ )
+import Cardano.Ledger.BaseTypes (
+    Inject (..),
+ )
+import Cardano.Ledger.Conway (
+    ConwayEra,
+ )
+import Cardano.Ledger.Conway.TxInfo (
+    ConwayContextError,
+ )
+import Cardano.Ledger.Dijkstra (
+    DijkstraEra,
+ )
+import Cardano.Ledger.Dijkstra.TxInfo (
+    DijkstraContextError,
+ )
 import Cardano.Network.Protocol.NodeToClient (
     Block,
     GenTxId,
@@ -264,7 +284,7 @@ import Test.QuickCheck (
     property,
     quickCheckWithResult,
     vectorOf,
-    withMaxSuccess,
+    withNumTests,
     (===),
  )
 import Test.QuickCheck.Arbitrary.Generic (
@@ -273,7 +293,10 @@ import Test.QuickCheck.Arbitrary.Generic (
 
 import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Babbage as Babbage
+import qualified Ogmios.Data.Json.Conway as Conway
+import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
 
+import qualified Cardano.Ledger.Alonzo.Plutus.TxInfo as Al
 import qualified Cardano.Ledger.Binary as Binary
 import qualified Cardano.Ledger.Plutus.Data as Ledger
 import qualified Codec.Json.Rpc as Rpc
@@ -308,7 +331,7 @@ validateToJSON gen encode (n, vectorFilePath) ref = parallel $ do
     runIO $ generateTestVectors (n, vectorFilePath) gen encode
     refs <- runIO $ unsafeReadSchemaRef ref
     specify (toString $ getSchemaRef ref)
-        $ withMaxSuccess n
+        $ withNumTests n
         $ forAllBlind gen
         $ prop_validateToJSON (encodingToValue . encode) refs
 
@@ -325,7 +348,7 @@ validateFromJSON ::
 validateFromJSON gen (encode, decode) (n, vectorFilePath) ref = parallel $ do
     runIO $ generateTestVectors (n, vectorFilePath) gen encode
     refs <- runIO $ unsafeReadSchemaRef ref
-    specify (toString $ getSchemaRef ref) $ withMaxSuccess n $ forAllBlind gen $ \a ->
+    specify (toString $ getSchemaRef ref) $ withNumTests n $ forAllBlind gen $ \a ->
         let leftSide = decodeWith decode (jsonToByteString (encode a))
          in conjoin
                 [ prop_validateToJSON (encodingToValue . encode) refs a
@@ -341,6 +364,28 @@ validateFromJSON gen (encode, decode) (n, vectorFilePath) ref = parallel $ do
 
 spec :: Spec
 spec = do
+    context "Context errors injected from Alonzo" $ do
+        let certificateMessage = "A certificate in the transaction isn't supported in neither plutus:v1 nor plutus:v2. Use plutus:v3 or higher."
+        let purposeMessage = "A script purpose in the transaction isn't supported in neither plutus:v1 nor plutus:v2. Use plutus:v3 or higher."
+        let encoded = encodingToValue . Conway.encodeContextError
+        let encodedDijkstra = encodingToValue . Dijkstra.encodeContextError
+
+        prop "Conway: CertificateNotSupported" $ \(cert :: TxCert ConwayEra) ->
+            encoded (inject (Al.CertificateNotSupported cert) :: ConwayContextError ConwayEra)
+                === Json.String certificateMessage
+
+        prop "Conway: PlutusPurposeNotSupported" $ \(purpose :: PlutusPurpose AsItem ConwayEra) ->
+            encoded (inject (Al.PlutusPurposeNotSupported purpose) :: ConwayContextError ConwayEra)
+                === Json.String purposeMessage
+
+        prop "Dijkstra: CertificateNotSupported" $ \(cert :: TxCert DijkstraEra) ->
+            encodedDijkstra (inject (Al.CertificateNotSupported cert) :: DijkstraContextError DijkstraEra)
+                === Json.String certificateMessage
+
+        prop "Dijkstra: PlutusPurposeNotSupported" $ \(purpose :: PlutusPurpose AsItem DijkstraEra) ->
+            encodedDijkstra (inject (Al.PlutusPurposeNotSupported purpose) :: DijkstraContextError DijkstraEra)
+                === Json.String purposeMessage
+
     context "JSON roundtrips" $ do
         prop "encodeUtxo / decodeUtxo (Babbage)" $ forAllShrinkBlind genUtxoBabbage shrinkUtxo $ \utxo ->
             let encoded = inefficientEncodingToValue (Babbage.encodeUtxo utxo)
@@ -411,12 +456,12 @@ spec = do
         specify "Golden: SubmitTransactionFailure<3133>" $ do
             json <- decodeFileThrow "SubmitTransactionFailure_1.json"
             refs <- unsafeReadSchemaRef "ogmios.json#/properties/SubmitTransactionResponse"
-            runQuickCheck $ withMaxSuccess 1 $ prop_validateToJSON identity refs json
+            runQuickCheck $ withNumTests 1 $ prop_validateToJSON identity refs json
 
         specify "Golden: NextTransactionResponse_1" $ do
             json <- decodeFileThrow "NextTransactionResponse_1.json"
             refs <- unsafeReadSchemaRef "ogmios.json#/properties/NextTransactionResponse"
-            runQuickCheck $ withMaxSuccess 1 $ prop_validateToJSON identity refs json
+            runQuickCheck $ withNumTests 1 $ prop_validateToJSON identity refs json
 
         context "Data / BinaryData" $ do
             prop "arbitrary"
@@ -1253,7 +1298,7 @@ validateLedgerStateQuery n subMethod params parser = do
     parallel $ specify (toString propName) $ do
         queryRefs <- unsafeReadSchemaRef (SchemaRef requestRef)
         runQuickCheck
-            $ withMaxSuccess 1
+            $ withNumTests 1
             $ prop_validateToJSON
                 ( \_params ->
                     Json.object
@@ -1271,15 +1316,24 @@ validateLedgerStateQuery n subMethod params parser = do
                 let eras =
                         mapMaybe
                             (\e -> (e,) <$> queryInEra e)
-                            [ SomeShelleyEra ShelleyBasedEraShelley
-                            , SomeShelleyEra ShelleyBasedEraAllegra
-                            , SomeShelleyEra ShelleyBasedEraMary
-                            , SomeShelleyEra ShelleyBasedEraAlonzo
-                            , SomeShelleyEra ShelleyBasedEraBabbage
-                            , SomeShelleyEra ShelleyBasedEraConway
-                            ]
+                            ( [ SomeShelleyEra ShelleyBasedEraShelley
+                              , SomeShelleyEra ShelleyBasedEraAllegra
+                              , SomeShelleyEra ShelleyBasedEraMary
+                              , SomeShelleyEra ShelleyBasedEraAlonzo
+                              , SomeShelleyEra ShelleyBasedEraBabbage
+                              , SomeShelleyEra ShelleyBasedEraConway
+                              ]
+                                -- NOTE: Dijkstra only for stake pools, which carry its BLS key.
+                                ++ [SomeShelleyEra ShelleyBasedEraDijkstra | subMethod == "stakePools"]
+                            )
 
                 let nEras = length eras
+
+                -- NOTE: Stake pool vectors come from Dijkstra to show the BLS key.
+                let isVectorEra = \case
+                        SomeShelleyEra ShelleyBasedEraConway -> subMethod /= "stakePools"
+                        SomeShelleyEra ShelleyBasedEraDijkstra -> subMethod == "stakePools"
+                        _ -> False
 
                 forM_ eras $ \(era, qry) -> do
                     responseRefs <- unsafeReadSchemaRef (SchemaRef responseRef)
@@ -1306,7 +1360,7 @@ validateLedgerStateQuery n subMethod params parser = do
                             error "unexpected effectful query in JSON spec"
                         SomeStandardQuery _ encodeResult genResult -> do
                             case era of
-                                SomeShelleyEra ShelleyBasedEraConway -> do
+                                _ | isVectorEra era -> do
                                     generateTestVectors
                                         (n, toString propName)
                                         (genResult Proxy)
@@ -1314,7 +1368,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                 _someOtherEra ->
                                     pure ()
                             runQuickCheck
-                                $ withMaxSuccess iterations
+                                $ withNumTests iterations
                                 $ forAllBlind
                                     (genResult Proxy)
                                     ( prop_validateToJSON
@@ -1323,7 +1377,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                     )
                         SomeCompoundQuery _ _ _ encodeResult genResult -> do
                             case era of
-                                SomeShelleyEra ShelleyBasedEraConway -> do
+                                _ | isVectorEra era -> do
                                     generateTestVectors
                                         (n, toString propName)
                                         (genResult Proxy)
@@ -1331,7 +1385,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                 _someOtherEra ->
                                     pure ()
                             runQuickCheck
-                                $ withMaxSuccess iterations
+                                $ withNumTests iterations
                                 $ forAllBlind
                                     (genResult Proxy)
                                     ( prop_validateToJSON
@@ -1340,7 +1394,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                     )
                         SomeCompound2Query _ _ _ _ encodeResult genResult -> do
                             case era of
-                                SomeShelleyEra ShelleyBasedEraConway -> do
+                                _ | isVectorEra era -> do
                                     generateTestVectors
                                         (n, toString propName)
                                         (genResult Proxy)
@@ -1348,7 +1402,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                 _someOtherEra ->
                                     pure ()
                             runQuickCheck
-                                $ withMaxSuccess iterations
+                                $ withNumTests iterations
                                 $ forAllBlind
                                     (genResult Proxy)
                                     ( prop_validateToJSON
@@ -1357,7 +1411,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                     )
                         SomeAdHocQuery _ encodeResult genResult -> do
                             case era of
-                                SomeShelleyEra ShelleyBasedEraConway -> do
+                                _ | isVectorEra era -> do
                                     generateTestVectors
                                         (n, toString propName)
                                         (genResult Proxy)
@@ -1365,7 +1419,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                 _someOtherEra ->
                                     pure ()
                             runQuickCheck
-                                $ withMaxSuccess iterations
+                                $ withNumTests iterations
                                 $ forAllBlind
                                     (genResult Proxy)
                                     ( prop_validateToJSON
@@ -1379,7 +1433,7 @@ validateLedgerStateQuery n subMethod params parser = do
                                 . Rpc.Response (Just $ toString method) Nothing
 
                     runQuickCheck
-                        $ withMaxSuccess 1
+                        $ withNumTests 1
                         $ forAllBlind
                             (pure QueryUnavailableInCurrentEra)
                             (prop_validateToJSON encodeQueryUnavailableInCurrentEra responseRefs)
@@ -1417,7 +1471,7 @@ validateNetworkQueryTagged n subMethod tag params parser = do
     parallel $ specify specName $ do
         queryRefs <- unsafeReadSchemaRef (SchemaRef requestRef)
         runQuickCheck
-            $ withMaxSuccess 1
+            $ withNumTests 1
             $ prop_validateToJSON
                 ( \_params ->
                     Json.object
@@ -1455,7 +1509,7 @@ validateNetworkQueryTagged n subMethod tag params parser = do
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse encodeResult)
                         runQuickCheck
-                            $ withMaxSuccess n
+                            $ withNumTests n
                             $ forAllBlind
                                 (reasonablySized $ genResult Proxy)
                                 ( prop_validateToJSON
@@ -1468,7 +1522,7 @@ validateNetworkQueryTagged n subMethod tag params parser = do
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse encodeResult)
                         runQuickCheck
-                            $ withMaxSuccess n
+                            $ withNumTests n
                             $ forAllBlind
                                 (reasonablySized $ genResult Proxy)
                                 ( prop_validateToJSON
@@ -1481,7 +1535,7 @@ validateNetworkQueryTagged n subMethod tag params parser = do
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse encodeResult)
                         runQuickCheck
-                            $ withMaxSuccess n
+                            $ withNumTests n
                             $ forAllBlind
                                 (reasonablySized $ genResult Proxy)
                                 ( prop_validateToJSON
@@ -1494,7 +1548,7 @@ validateNetworkQueryTagged n subMethod tag params parser = do
                             (reasonablySized $ genResult Proxy)
                             (encodeQueryResponse (Right . encodeResult))
                         runQuickCheck
-                            $ withMaxSuccess n
+                            $ withNumTests n
                             $ forAllBlind
                                 (reasonablySized $ genResult Proxy)
                                 ( prop_validateToJSON

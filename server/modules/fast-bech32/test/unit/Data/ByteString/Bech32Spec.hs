@@ -23,7 +23,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
     ( prop )
 import Test.QuickCheck
-    ( Gen, Property, choose, elements, forAll, vector, withMaxSuccess, (===) )
+    ( Gen, Property, choose, elements, forAll, vector, withNumTests, (===) )
 
 import qualified Codec.Binary.Bech32 as Oracle
 import qualified Data.ByteString as BS
@@ -32,7 +32,7 @@ import qualified Data.Text as T
 spec :: Spec
 spec = describe "encodeBech32" $
     prop "oracle with existing bech32's library" $
-        withMaxSuccess 5000 $
+        withNumTests 5000 $
             forAll genBytes $ \bytes ->
                 forAll genHrp $ prop_matchOracle bytes
 

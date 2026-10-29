@@ -79,6 +79,7 @@ library
       Ogmios.Data.Ledger.PredicateFailure.Alonzo
       Ogmios.Data.Ledger.PredicateFailure.Babbage
       Ogmios.Data.Ledger.PredicateFailure.Conway
+      Ogmios.Data.Ledger.PredicateFailure.Dijkstra
       Ogmios.Data.Ledger.PredicateFailure.Mary
       Ogmios.Data.Ledger.PredicateFailure.Shelley
       Ogmios.Data.Ledger.Rewards
@@ -188,7 +189,6 @@ library
     , iproute
     , json-rpc
     , lens-aeson
-    , memory
     , mempack
     , mtl
     , optparse-applicative
@@ -204,6 +204,7 @@ library
     , prettyprinter
     , profunctors
     , prometheus
+    , ram
     , relude
     , safe
     , safe-exceptions
@@ -352,6 +353,7 @@ test-suite unit
     , base >=4.7 && <5
     , bytestring
     , cardano-crypto-class
+    , cardano-data
     , cardano-ledger-allegra
     , cardano-ledger-alonzo
     , cardano-ledger-alonzo:testlib
@@ -361,6 +363,8 @@ test-suite unit
     , cardano-ledger-conway
     , cardano-ledger-conway:testlib
     , cardano-ledger-core
+    , cardano-ledger-dijkstra
+    , cardano-ledger-dijkstra:testlib
     , cardano-ledger-mary
     , cardano-ledger-shelley
     , cardano-slotting

@@ -352,10 +352,24 @@ components:
       $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/68"
     3168/EmptyTreasuryWithdrawal:
       $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/69"
-    3997/UnexpectedMempoolError:
+    3169/MissingRequiredGuards:
       $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/70"
-    3998/UnrecognizedCertificateType:
+    3170/MalformedGuardDatums:
       $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/71"
+    3171/PointerAddressInCollateralReturn:
+      $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/72"
+    3172/InvalidBlsProofOfPossession:
+      $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/73"
+    3173/AllInputsAreSpent:
+      $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/74"
+    3174/WithdrawalsExceedingBalance:
+      $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/75"
+    3175/BalancesOutsideIntervals:
+      $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/76"
+    3997/UnexpectedMempoolError:
+      $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/77"
+    3998/UnrecognizedCertificateType:
+      $ref: "/ogmios.json#/definitions/SubmitTransactionFailure/oneOf/78"
 {{% /embed-async-api %}}
 
 ## API Reference
