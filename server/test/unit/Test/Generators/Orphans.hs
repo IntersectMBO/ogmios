@@ -45,6 +45,7 @@ instance Arbitrary ScriptPurposeIndexInAnyEra where
         [ ScriptPurposeIndexInAnyEra . (ShelleyBasedEraAlonzo,) <$> arbitrary
         , ScriptPurposeIndexInAnyEra . (ShelleyBasedEraBabbage,) <$> arbitrary
         , ScriptPurposeIndexInAnyEra . (ShelleyBasedEraConway,) <$> arbitrary
+        , ScriptPurposeIndexInAnyEra . (ShelleyBasedEraDijkstra,) <$> arbitrary
         ]
 
 instance Arbitrary RewardAccountSummary where
