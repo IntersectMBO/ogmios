@@ -86,13 +86,16 @@ module Ogmios.Prelude (
     ByronEra,
     EraIndex (..),
     ShelleyBasedEra (..),
-    ToShelleyBasedEra (..),
     IsShelleyBasedEra (..),
-    AlonzoBasedEra (..),
-    IsAlonzoBasedEra (..),
+    HasPlutus,
+    PlutusEraConstraints,
+    plutusEraConstraints,
     fromEraIndex,
 ) where
 
+import Cardano.Ledger.Alonzo.Plutus.Context (
+    EraPlutusContext,
+ )
 import Cardano.Ledger.Api.Era (
     DijkstraEra,
  )
@@ -103,6 +106,7 @@ import Cardano.Ledger.Binary (
 import Cardano.Ledger.Core (
     ByronEra,
     Era,
+    EraTxCert,
  )
 import Data.Aeson (
     ToJSON (..),
@@ -302,40 +306,35 @@ deriving instance Show (ShelleyBasedEra era)
 deriving instance Eq (ShelleyBasedEra era)
 deriving instance Ord (ShelleyBasedEra era)
 
-data AlonzoBasedEra era where
-    AlonzoBasedEraAlonzo :: AlonzoBasedEra AlonzoEra
-    AlonzoBasedEraBabbage :: AlonzoBasedEra BabbageEra
-    AlonzoBasedEraConway :: AlonzoBasedEra ConwayEra
-    AlonzoBasedEraDijkstra :: AlonzoBasedEra DijkstraEra
+-- | Whether an era has Plutus scripts.
+type family HasPlutus era :: Bool where
+    HasPlutus ShelleyEra = False
+    HasPlutus AllegraEra = False
+    HasPlutus MaryEra = False
+    HasPlutus AlonzoEra = True
+    HasPlutus BabbageEra = True
+    HasPlutus ConwayEra = True
+    HasPlutus DijkstraEra = True
 
-deriving instance Show (AlonzoBasedEra era)
-deriving instance Eq (AlonzoBasedEra era)
-deriving instance Ord (AlonzoBasedEra era)
+-- | Ledger classes of the eras with Plutus scripts.
+type PlutusEraConstraints era =
+    ( EraPlutusContext era
+    , EraTxCert era
+    )
 
-class ToShelleyBasedEra f where
-    toShelleyBasedEra :: f era -> ShelleyBasedEra era
-
-instance ToShelleyBasedEra AlonzoBasedEra where
-    toShelleyBasedEra = \case
-        AlonzoBasedEraAlonzo -> ShelleyBasedEraAlonzo
-        AlonzoBasedEraBabbage -> ShelleyBasedEraBabbage
-        AlonzoBasedEraConway -> ShelleyBasedEraConway
-        AlonzoBasedEraDijkstra -> ShelleyBasedEraDijkstra
-
-class IsAlonzoBasedEra era where
-    alonzoBasedEra :: AlonzoBasedEra era
-
-instance IsAlonzoBasedEra AlonzoEra where
-    alonzoBasedEra = AlonzoBasedEraAlonzo
-
-instance IsAlonzoBasedEra BabbageEra where
-    alonzoBasedEra = AlonzoBasedEraBabbage
-
-instance IsAlonzoBasedEra ConwayEra where
-    alonzoBasedEra = AlonzoBasedEraConway
-
-instance IsAlonzoBasedEra DijkstraEra where
-    alonzoBasedEra = AlonzoBasedEraDijkstra
+-- | Bring the Plutus ledger classes into scope.
+plutusEraConstraints ::
+    (HasPlutus era ~ True) =>
+    -- | An era from Alonzo onwards
+    ShelleyBasedEra era ->
+    -- | Code that needs the Plutus classes
+    ((PlutusEraConstraints era) => r) ->
+    r
+plutusEraConstraints = \case
+    ShelleyBasedEraAlonzo -> \x -> x
+    ShelleyBasedEraBabbage -> \x -> x
+    ShelleyBasedEraConway -> \x -> x
+    ShelleyBasedEraDijkstra -> \x -> x
 
 data SomeShelleyEra
     = forall era. SomeShelleyEra (ShelleyBasedEra era)
@@ -372,6 +371,9 @@ instance IsShelleyBasedEra BabbageEra where
 
 instance IsShelleyBasedEra ConwayEra where
     shelleyBasedEra = ShelleyBasedEraConway
+
+instance IsShelleyBasedEra DijkstraEra where
+    shelleyBasedEra = ShelleyBasedEraDijkstra
 
 type family BlockCrypto block :: Type where
     BlockCrypto (CardanoBlock crypto) = crypto

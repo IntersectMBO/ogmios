@@ -267,7 +267,7 @@ encodeUtxoFailure
     -> MultiEraPredicateFailure
 encodeUtxoFailure = \case
     Cn.UtxosFailure e ->
-        encodeUtxosFailure AlonzoBasedEraConway e
+        encodeUtxosFailure era e
     Cn.BadInputsUTxO inputs ->
         UnknownUtxoReference (NESet.toSet inputs)
     Cn.OutsideValidityIntervalUTxO validityInterval currentSlot ->
@@ -339,9 +339,9 @@ encodeUtxoFailure = \case
 
 encodeUtxosFailure
     :: forall era.
-        ( Era era
+        ( HasPlutus era ~ True
         )
-    => AlonzoBasedEra era
+    => ShelleyBasedEra era
     -> Cn.ConwayUtxosPredFailure era
     -> MultiEraPredicateFailure
 encodeUtxosFailure era = \case
@@ -395,4 +395,4 @@ encodeUtxowFailure = \case
     Cn.MalformedReferenceScripts scripts ->
         MalformedScripts (NESet.toSet scripts)
   where
-    era = AlonzoBasedEraConway
+    era = ShelleyBasedEraConway

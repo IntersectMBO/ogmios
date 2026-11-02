@@ -404,10 +404,10 @@ genEvaluateTransactionError = frequency
 
 genContextError :: Gen ContextErrorInAnyEra
 genContextError = oneof
-    [ ContextErrorInAnyEra . (AlonzoBasedEraAlonzo,) <$> arbitrary
-    , ContextErrorInAnyEra . (AlonzoBasedEraBabbage,) <$> arbitrary
-    , ContextErrorInAnyEra . (AlonzoBasedEraConway,) <$> arbitrary
-    , ContextErrorInAnyEra . (AlonzoBasedEraDijkstra,) <$> arbitrary
+    [ ContextErrorInAnyEra . (ShelleyBasedEraAlonzo,) <$> arbitrary
+    , ContextErrorInAnyEra . (ShelleyBasedEraBabbage,) <$> arbitrary
+    , ContextErrorInAnyEra . (ShelleyBasedEraConway,) <$> arbitrary
+    , ContextErrorInAnyEra . (ShelleyBasedEraDijkstra,) <$> arbitrary
     ]
 
 genPreAlonzoEra :: Gen Text
@@ -441,17 +441,17 @@ genScriptFailure = oneof
     inAlonzoEra
         :: Gen (TransactionScriptFailure AlonzoEra)
         -> Gen TransactionScriptFailureInAnyEra
-    inAlonzoEra = fmap (TransactionScriptFailureInAnyEra . (AlonzoBasedEraAlonzo,))
+    inAlonzoEra = fmap (TransactionScriptFailureInAnyEra . (ShelleyBasedEraAlonzo,))
 
     inBabbageEra
         :: Gen (TransactionScriptFailure BabbageEra)
         -> Gen TransactionScriptFailureInAnyEra
-    inBabbageEra = fmap (TransactionScriptFailureInAnyEra . (AlonzoBasedEraBabbage,))
+    inBabbageEra = fmap (TransactionScriptFailureInAnyEra . (ShelleyBasedEraBabbage,))
 
     inConwayEra
         :: Gen (TransactionScriptFailure ConwayEra)
         -> Gen TransactionScriptFailureInAnyEra
-    inConwayEra = fmap (TransactionScriptFailureInAnyEra . (AlonzoBasedEraConway,))
+    inConwayEra = fmap (TransactionScriptFailureInAnyEra . (ShelleyBasedEraConway,))
 
 genAcquireFailure :: Gen AcquireFailure
 genAcquireFailure = elements

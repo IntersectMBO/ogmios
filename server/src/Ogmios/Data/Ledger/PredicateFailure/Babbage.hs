@@ -39,7 +39,7 @@ encodeLedgerFailure ::
     MultiEraPredicateFailure
 encodeLedgerFailure = \case
     Sh.UtxowFailure e ->
-        encodeUtxowFailure AlonzoBasedEraBabbage (Alonzo.encodeUtxosFailure AlonzoBasedEraBabbage) e
+        encodeUtxowFailure ShelleyBasedEraBabbage (Alonzo.encodeUtxosFailure ShelleyBasedEraBabbage) e
     Sh.DelegsFailure e ->
         encodeDelegsFailure e
     Sh.ShelleyIncompleteWithdrawals ws ->
@@ -56,9 +56,10 @@ encodeLedgerFailure = \case
 encodeUtxowFailure ::
     forall era.
     ( Era era
+    , HasPlutus era ~ True
     , PredicateFailure (EraRule "UTXO" era) ~ Ba.BabbageUtxoPredFailure era
     ) =>
-    AlonzoBasedEra era ->
+    ShelleyBasedEra era ->
     (PredicateFailure (EraRule "UTXOS" era) -> MultiEraPredicateFailure) ->
     Ba.BabbageUtxowPredFailure era ->
     MultiEraPredicateFailure
@@ -77,7 +78,7 @@ encodeUtxowFailure era encodeUtxosFailure = \case
 encodeUtxoFailure ::
     forall era.
     (Era era) =>
-    AlonzoBasedEra era ->
+    ShelleyBasedEra era ->
     (PredicateFailure (EraRule "UTXOS" era) -> MultiEraPredicateFailure) ->
     Ba.BabbageUtxoPredFailure era ->
     MultiEraPredicateFailure
@@ -89,7 +90,7 @@ encodeUtxoFailure era encodeUtxosFailureInEra = \case
     Ba.BabbageOutputTooSmallUTxO outs ->
         let insufficientlyFundedOutputs =
                 ( \(out, minAda) ->
-                    ( TxOutInAnyEra (toShelleyBasedEra era, out)
+                    ( TxOutInAnyEra (era, out)
                     , Just minAda
                     )
                 )

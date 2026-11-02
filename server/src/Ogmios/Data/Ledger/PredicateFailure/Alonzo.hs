@@ -56,8 +56,8 @@ encodeLedgerFailure
 encodeLedgerFailure = \case
     Sh.UtxowFailure e  ->
         encodeUtxowFailure
-            AlonzoBasedEraAlonzo
-            (let era = AlonzoBasedEraAlonzo in encodeUtxoFailure era (encodeUtxosFailure era))
+            ShelleyBasedEraAlonzo
+            (let era = ShelleyBasedEraAlonzo in encodeUtxoFailure era (encodeUtxosFailure era))
             e
     Sh.DelegsFailure e ->
         encodeDelegsFailure e
@@ -74,9 +74,9 @@ encodeLedgerFailure = \case
 
 encodeUtxowFailure
     :: forall era.
-        ( Era era
+        ( HasPlutus era ~ True
         )
-    => AlonzoBasedEra era
+    => ShelleyBasedEra era
     -> (PredicateFailure (EraRule "UTXO" era) -> MultiEraPredicateFailure)
     -> Al.AlonzoUtxowPredFailure era
     -> MultiEraPredicateFailure
@@ -104,7 +104,7 @@ encodeUtxoFailure
     :: forall era.
         ( Era era
         )
-    => AlonzoBasedEra era
+    => ShelleyBasedEra era
     -> (PredicateFailure (EraRule "UTXOS" era) -> MultiEraPredicateFailure)
     -> Al.AlonzoUtxoPredFailure era
     -> MultiEraPredicateFailure
@@ -114,7 +114,7 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
     Al.OutsideValidityIntervalUTxO validityInterval currentSlot ->
         TransactionOutsideValidityInterval { validityInterval, currentSlot }
     Al.OutputTooBigUTxO outs ->
-        let culpritOutputs = (\(_, _, out) -> TxOutInAnyEra (toShelleyBasedEra era, out)) <$> toList outs in
+        let culpritOutputs = (\(_, _, out) -> TxOutInAnyEra (era, out)) <$> toList outs in
         ValueSizeAboveLimit culpritOutputs
     Al.MaxTxSizeUTxO (Mismatch measuredSize maximumSize) ->
         TransactionTooLarge
@@ -126,8 +126,8 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
     Al.FeeTooSmallUTxO (Mismatch suppliedFee minimumRequiredFee)  ->
         TransactionFeeTooSmall { minimumRequiredFee, suppliedFee }
     Al.ValueNotConservedUTxO (Mismatch consumed produced) ->
-        let valueConsumed = ValueInAnyEra (toShelleyBasedEra era, consumed) in
-        let valueProduced = ValueInAnyEra (toShelleyBasedEra era, produced) in
+        let valueConsumed = ValueInAnyEra (era, consumed) in
+        let valueProduced = ValueInAnyEra (era, produced) in
         ValueNotConserved { valueConsumed, valueProduced }
     Al.WrongNetwork expectedNetwork invalidAddrs ->
         let invalidEntities = DiscriminatedAddresses (NESet.toSet invalidAddrs) in
@@ -137,10 +137,10 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
         NetworkMismatch { expectedNetwork, invalidEntities }
     Al.OutputTooSmallUTxO outs ->
         let insufficientlyFundedOutputs =
-                (\out -> (TxOutInAnyEra (toShelleyBasedEra era, out), Nothing)) <$> toList outs
+                (\out -> (TxOutInAnyEra (era, out), Nothing)) <$> toList outs
          in InsufficientAdaInOutput { insufficientlyFundedOutputs }
     Al.OutputBootAddrAttrsTooBig outs ->
-        let culpritOutputs = (\out -> TxOutInAnyEra (toShelleyBasedEra era, out)) <$> toList outs in
+        let culpritOutputs = (\out -> TxOutInAnyEra (era, out)) <$> toList outs in
         BootstrapAddressAttributesTooLarge { culpritOutputs }
     Al.InsufficientCollateral providedCollateral minimumRequiredCollateral ->
         InsufficientCollateral { providedCollateral, minimumRequiredCollateral }
@@ -152,7 +152,7 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
     Al.OutsideForecast slot ->
         SlotOutsideForeseeableFuture { slot }
     Al.CollateralContainsNonADA value ->
-        let valueInAnyEra = ValueInAnyEra (toShelleyBasedEra era, value) in
+        let valueInAnyEra = ValueInAnyEra (era, value) in
         NonAdaValueAsCollateral valueInAnyEra
     Al.NoCollateralInputs{} ->
         MissingCollateralInputs
@@ -168,9 +168,9 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
 
 encodeUtxosFailure
     :: forall era.
-        ( Era era
+        ( HasPlutus era ~ True
         )
-    => AlonzoBasedEra era
+    => ShelleyBasedEra era
     -> Al.AlonzoUtxosPredFailure era
     -> MultiEraPredicateFailure
 encodeUtxosFailure era = \case
@@ -183,9 +183,9 @@ encodeUtxosFailure era = \case
 
 encodeCollectErrors
     :: forall era.
-        ( Era era
+        ( HasPlutus era ~ True
         )
-    => AlonzoBasedEra era
+    => ShelleyBasedEra era
     -> [CollectError era]
     -> NonEmpty MultiEraPredicateFailure
 encodeCollectErrors era errors =
