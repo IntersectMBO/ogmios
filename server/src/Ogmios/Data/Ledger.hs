@@ -69,17 +69,17 @@ data TxOutInAnyEra
 
 data ScriptPurposeItemInAnyEra
     = forall era.
-        (Era era) =>
+        (PlutusEraConstraints era) =>
       ScriptPurposeItemInAnyEra
-        ( AlonzoBasedEra era
+        ( ShelleyBasedEra era
         , PlutusPurpose AsItem era
         )
 
 data ScriptPurposeIndexInAnyEra
     = forall era.
-        (Era era) =>
+        (PlutusEraConstraints era) =>
       ScriptPurposeIndexInAnyEra
-        ( AlonzoBasedEra era
+        ( ShelleyBasedEra era
         , PlutusPurpose AsIx era
         )
 
@@ -96,34 +96,28 @@ scriptPurposeInMostRecentEra ::
     ScriptPurposeIndexInAnyEra ->
     PlutusPurpose AsIx (MostRecentEra (CardanoBlock crypto))
 scriptPurposeInMostRecentEra = \case
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraAlonzo, ix) ->
-        upgradePlutusPurposeAsIx
-            ( upgradePlutusPurposeAsIx
-                (upgradePlutusPurposeAsIx ix)
-            )
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraBabbage, ix) ->
-        upgradePlutusPurposeAsIx
-            (upgradePlutusPurposeAsIx ix)
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraConway, ix) ->
-        upgradePlutusPurposeAsIx ix
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraDijkstra, ix) ->
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraAlonzo, ix) ->
+        upgradePlutusPurposeAsIx @DijkstraEra
+            . upgradePlutusPurposeAsIx @ConwayEra
+            . upgradePlutusPurposeAsIx @BabbageEra
+            $ ix
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraBabbage, ix) ->
+        upgradePlutusPurposeAsIx @DijkstraEra
+            . upgradePlutusPurposeAsIx @ConwayEra
+            $ ix
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraConway, ix) ->
+        upgradePlutusPurposeAsIx @DijkstraEra ix
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraDijkstra, ix) ->
         ix
 
 data ContextErrorInAnyEra
     = forall era.
-        (Era era) =>
+        (PlutusEraConstraints era) =>
       ContextErrorInAnyEra
-        ( AlonzoBasedEra era
+        ( ShelleyBasedEra era
         , ContextError era
         )
 
 instance Show ContextErrorInAnyEra where
-    show = \case
-        ContextErrorInAnyEra (AlonzoBasedEraAlonzo, e) ->
-            show e
-        ContextErrorInAnyEra (AlonzoBasedEraBabbage, e) ->
-            show e
-        ContextErrorInAnyEra (AlonzoBasedEraConway, e) ->
-            show e
-        ContextErrorInAnyEra (AlonzoBasedEraDijkstra, e) ->
-            show e
+    show (ContextErrorInAnyEra (_, e)) =
+        show e

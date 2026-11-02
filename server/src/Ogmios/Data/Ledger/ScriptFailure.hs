@@ -36,18 +36,15 @@ data NodeTipTooOldError = NodeTipTooOld
 deriving instance Show EvaluateTransactionError
 
 data TransactionScriptFailureInAnyEra =
-    forall era. (Era era)
+    forall era. (PlutusEraConstraints era)
     => TransactionScriptFailureInAnyEra
-        ( AlonzoBasedEra era
+        ( ShelleyBasedEra era
         , Ledger.TransactionScriptFailure era
         )
 
 instance  Show TransactionScriptFailureInAnyEra where
-    show = \case
-        TransactionScriptFailureInAnyEra (AlonzoBasedEraAlonzo, e) -> show e
-        TransactionScriptFailureInAnyEra (AlonzoBasedEraBabbage, e) -> show e
-        TransactionScriptFailureInAnyEra (AlonzoBasedEraConway, e) -> show e
-        TransactionScriptFailureInAnyEra (AlonzoBasedEraDijkstra, e) -> show e
+    show (TransactionScriptFailureInAnyEra (_, e)) =
+        show e
 
 -- | Return the most relevant script failure from a list of errors.
 --

@@ -86,13 +86,17 @@ module Ogmios.Prelude (
     ByronEra,
     EraIndex (..),
     ShelleyBasedEra (..),
-    ToShelleyBasedEra (..),
     IsShelleyBasedEra (..),
-    AlonzoBasedEra (..),
-    IsAlonzoBasedEra (..),
+    PlutusEraConstraints,
     fromEraIndex,
 ) where
 
+import Cardano.Ledger.Alonzo.Plutus.Context (
+    EraPlutusContext,
+ )
+import Cardano.Ledger.Alonzo.Scripts (
+    AlonzoScript,
+ )
 import Cardano.Ledger.Api.Era (
     DijkstraEra,
  )
@@ -103,6 +107,8 @@ import Cardano.Ledger.Binary (
 import Cardano.Ledger.Core (
     ByronEra,
     Era,
+    EraTxCert,
+    Script,
  )
 import Data.Aeson (
     ToJSON (..),
@@ -302,40 +308,13 @@ deriving instance Show (ShelleyBasedEra era)
 deriving instance Eq (ShelleyBasedEra era)
 deriving instance Ord (ShelleyBasedEra era)
 
-data AlonzoBasedEra era where
-    AlonzoBasedEraAlonzo :: AlonzoBasedEra AlonzoEra
-    AlonzoBasedEraBabbage :: AlonzoBasedEra BabbageEra
-    AlonzoBasedEraConway :: AlonzoBasedEra ConwayEra
-    AlonzoBasedEraDijkstra :: AlonzoBasedEra DijkstraEra
-
-deriving instance Show (AlonzoBasedEra era)
-deriving instance Eq (AlonzoBasedEra era)
-deriving instance Ord (AlonzoBasedEra era)
-
-class ToShelleyBasedEra f where
-    toShelleyBasedEra :: f era -> ShelleyBasedEra era
-
-instance ToShelleyBasedEra AlonzoBasedEra where
-    toShelleyBasedEra = \case
-        AlonzoBasedEraAlonzo -> ShelleyBasedEraAlonzo
-        AlonzoBasedEraBabbage -> ShelleyBasedEraBabbage
-        AlonzoBasedEraConway -> ShelleyBasedEraConway
-        AlonzoBasedEraDijkstra -> ShelleyBasedEraDijkstra
-
-class IsAlonzoBasedEra era where
-    alonzoBasedEra :: AlonzoBasedEra era
-
-instance IsAlonzoBasedEra AlonzoEra where
-    alonzoBasedEra = AlonzoBasedEraAlonzo
-
-instance IsAlonzoBasedEra BabbageEra where
-    alonzoBasedEra = AlonzoBasedEraBabbage
-
-instance IsAlonzoBasedEra ConwayEra where
-    alonzoBasedEra = AlonzoBasedEraConway
-
-instance IsAlonzoBasedEra DijkstraEra where
-    alonzoBasedEra = AlonzoBasedEraDijkstra
+-- | Ledger classes of the eras with Plutus scripts. The script equality also
+-- lets GHC rule out pre-Alonzo eras when matching on 'ShelleyBasedEra'.
+type PlutusEraConstraints era =
+    ( EraPlutusContext era
+    , EraTxCert era
+    , Script era ~ AlonzoScript era
+    )
 
 data SomeShelleyEra
     = forall era. SomeShelleyEra (ShelleyBasedEra era)
@@ -372,6 +351,9 @@ instance IsShelleyBasedEra BabbageEra where
 
 instance IsShelleyBasedEra ConwayEra where
     shelleyBasedEra = ShelleyBasedEraConway
+
+instance IsShelleyBasedEra DijkstraEra where
+    shelleyBasedEra = ShelleyBasedEraDijkstra
 
 type family BlockCrypto block :: Type where
     BlockCrypto (CardanoBlock crypto) = crypto

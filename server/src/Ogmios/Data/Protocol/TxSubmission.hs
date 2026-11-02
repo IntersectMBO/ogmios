@@ -419,10 +419,9 @@ type CanEvaluateScriptsInEra era =
     , BabbageEraTxBody era
     , EraPlutusContext era
     , EraUTxO era
+    , IsShelleyBasedEra era
     , ScriptsNeeded era ~ AlonzoScriptsNeeded era
     , Script era ~ AlonzoScript era
-    , EraPlutusContext era
-    , IsAlonzoBasedEra era
     )
 
 -- | Evaluate script executions units for the given transaction.
@@ -457,7 +456,7 @@ evaluateExecutionUnits pparams systemStart epochInfo utxo tx =
     aggregateReports ptr result (failures, successes) =
         case result of
             Left scriptFailure ->
-                let failureInAnyEra = TransactionScriptFailureInAnyEra (alonzoBasedEra @era, scriptFailure)
+                let failureInAnyEra = TransactionScriptFailureInAnyEra (shelleyBasedEra @era, scriptFailure)
                  in ( Map.unionWith (++) (Map.singleton ix [failureInAnyEra]) failures
                     , successes
                     )
@@ -466,7 +465,7 @@ evaluateExecutionUnits pparams systemStart epochInfo utxo tx =
                 , Map.singleton ix exUnits <> successes
                 )
       where
-        ix = ScriptPurposeIndexInAnyEra (alonzoBasedEra @era, ptr)
+        ix = ScriptPurposeIndexInAnyEra (shelleyBasedEra @era, ptr)
 
     reports ::
         Map

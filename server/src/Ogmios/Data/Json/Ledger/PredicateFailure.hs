@@ -1200,39 +1200,39 @@ encodeScriptPurposeItemInAnyEra
     :: ScriptPurposeItemInAnyEra
     -> StrictMaybe Json
 encodeScriptPurposeItemInAnyEra = \case
-    ScriptPurposeItemInAnyEra (AlonzoBasedEraAlonzo, purpose) ->
+    ScriptPurposeItemInAnyEra (ShelleyBasedEraAlonzo, purpose) ->
         Alonzo.encodeScriptPurposeItem purpose
-    ScriptPurposeItemInAnyEra (AlonzoBasedEraBabbage, purpose) ->
+    ScriptPurposeItemInAnyEra (ShelleyBasedEraBabbage, purpose) ->
         Alonzo.encodeScriptPurposeItem purpose
-    ScriptPurposeItemInAnyEra (AlonzoBasedEraConway, purpose) ->
+    ScriptPurposeItemInAnyEra (ShelleyBasedEraConway, purpose) ->
         SJust (Conway.encodeScriptPurposeItem purpose)
-    ScriptPurposeItemInAnyEra (AlonzoBasedEraDijkstra, purpose) ->
+    ScriptPurposeItemInAnyEra (ShelleyBasedEraDijkstra, purpose) ->
         SJust (Dijkstra.encodeScriptPurposeItem purpose)
 
 encodeScriptPurposeIndexInAnyEra
     :: ScriptPurposeIndexInAnyEra
     -> Json
 encodeScriptPurposeIndexInAnyEra = \case
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraAlonzo, purpose) ->
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraAlonzo, purpose) ->
         Alonzo.encodeScriptPurposeIndex purpose
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraBabbage, purpose) ->
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraBabbage, purpose) ->
         Alonzo.encodeScriptPurposeIndex purpose
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraConway, purpose) ->
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraConway, purpose) ->
         Conway.encodeScriptPurposeIndex purpose
-    ScriptPurposeIndexInAnyEra (AlonzoBasedEraDijkstra, purpose) ->
+    ScriptPurposeIndexInAnyEra (ShelleyBasedEraDijkstra, purpose) ->
         Dijkstra.encodeScriptPurposeIndex purpose
 
 encodeContextErrorInAnyEra
     :: ContextErrorInAnyEra
     -> Json
 encodeContextErrorInAnyEra = \case
-    ContextErrorInAnyEra (AlonzoBasedEraAlonzo, err) ->
+    ContextErrorInAnyEra (ShelleyBasedEraAlonzo, err) ->
         Alonzo.encodeContextError err
-    ContextErrorInAnyEra (AlonzoBasedEraBabbage, err) ->
+    ContextErrorInAnyEra (ShelleyBasedEraBabbage, err) ->
         Babbage.encodeContextError err
-    ContextErrorInAnyEra (AlonzoBasedEraConway, err) ->
+    ContextErrorInAnyEra (ShelleyBasedEraConway, err) ->
         Conway.encodeContextError err
-    ContextErrorInAnyEra (AlonzoBasedEraDijkstra, err) ->
+    ContextErrorInAnyEra (ShelleyBasedEraDijkstra, err) ->
         Dijkstra.encodeContextError err
 
 encodeDiscriminatedEntities
