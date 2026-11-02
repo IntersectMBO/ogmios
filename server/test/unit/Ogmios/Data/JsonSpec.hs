@@ -402,6 +402,9 @@ spec = do
                         utxo'
                             === upgrade utxo
                                 & counterexample (decodeUtf8 $ Json.encodePretty encoded)
+                    Json.Success UTxOInDijkstraEra{} ->
+                        property False
+                            & counterexample "decoded a Babbage Utxo as Dijkstra"
 
         specify "Golden: Utxo_1.json" $ do
             json <- decodeFileThrow "Utxo_1.json"
@@ -413,6 +416,8 @@ spec = do
                     fail "successfully decoded an invalid payload (as Babbage Utxo)?"
                 Json.Success UTxOInConwayEra{} ->
                     fail "successfully decoded an invalid payload( as Conway Utxo)?"
+                Json.Success UTxOInDijkstraEra{} ->
+                    fail "successfully decoded an invalid payload (as Dijkstra Utxo)?"
 
         specify "Golden: Utxo_2.json" $ do
             json <- decodeFileThrow "Utxo_2.json"
@@ -444,6 +449,8 @@ spec = do
                     fail "successfully decoded an invalid payload( as Babbage Utxo)?"
                 Json.Success UTxOInConwayEra{} ->
                     fail "successfully decoded an invalid payload (as Conway Utxo)?"
+                Json.Success UTxOInDijkstraEra{} ->
+                    fail "successfully decoded an invalid payload (as Dijkstra Utxo)?"
 
         specify "Golden: Script_Native_0.json" $ do
             json <- decodeFileThrow "Script_Native_0.json"
