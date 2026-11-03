@@ -389,6 +389,7 @@ plausibleTxsIds :: [Ledger.TxId]
 plausibleTxsIds = unGenTxId . txId <$> plausibleTxs
   where
     unGenTxId = \case
+        GenTxIdDijkstra (ShelleyTxId x) -> x
         GenTxIdConway (ShelleyTxId x)  -> x
         GenTxIdBabbage (ShelleyTxId x) -> x
         GenTxIdAlonzo (ShelleyTxId x)  -> x

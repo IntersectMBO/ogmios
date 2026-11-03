@@ -42,9 +42,10 @@ import Test.Cardano.Ledger.Dijkstra.Arbitrary
 
 instance Arbitrary ScriptPurposeIndexInAnyEra where
     arbitrary = oneof
-        [ ScriptPurposeIndexInAnyEra . (AlonzoBasedEraAlonzo,) <$> arbitrary
-        , ScriptPurposeIndexInAnyEra . (AlonzoBasedEraBabbage,) <$> arbitrary
-        , ScriptPurposeIndexInAnyEra . (AlonzoBasedEraConway,) <$> arbitrary
+        [ ScriptPurposeIndexInAnyEra . (ShelleyBasedEraAlonzo,) <$> arbitrary
+        , ScriptPurposeIndexInAnyEra . (ShelleyBasedEraBabbage,) <$> arbitrary
+        , ScriptPurposeIndexInAnyEra . (ShelleyBasedEraConway,) <$> arbitrary
+        , ScriptPurposeIndexInAnyEra . (ShelleyBasedEraDijkstra,) <$> arbitrary
         ]
 
 instance Arbitrary RewardAccountSummary where

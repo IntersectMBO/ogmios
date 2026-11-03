@@ -125,14 +125,14 @@ encodeUtxowFailure = \case
     Di.MalformedGuardDatums guards ->
         MalformedGuardDatums { malformedGuards = NESet.toSet guards }
   where
-    era = AlonzoBasedEraDijkstra
+    era = ShelleyBasedEraDijkstra
 
 encodeUtxoFailure
     :: Di.DijkstraUtxoPredFailure DijkstraEra
     -> MultiEraPredicateFailure
 encodeUtxoFailure = \case
     Di.UtxosFailure e ->
-        encodeUtxosFailure AlonzoBasedEraDijkstra e
+        encodeUtxosFailure era e
     Di.BadInputsUTxO inputs ->
         UnknownUtxoReference (NESet.toSet inputs)
     Di.OutsideValidityIntervalUTxO validityInterval currentSlot ->
@@ -406,7 +406,7 @@ encodeSubUtxowFailure = \case
     Di.SubMalformedGuardDatums guards ->
         MalformedGuardDatums { malformedGuards = NESet.toSet guards }
   where
-    era = AlonzoBasedEraDijkstra
+    era = ShelleyBasedEraDijkstra
 
 encodeSubUtxoFailure
     :: Di.DijkstraSubUtxoPredFailure DijkstraEra
