@@ -24,6 +24,7 @@ constraints:
   , any.cardano-ledger-dijkstra >= 0.4
   , any.cardano-diffusion >= 1.3
 
+  , any.fast-bech32 == 1.0.1
   , any.formatting == 7.2.0
   , any.text source
 
@@ -38,7 +39,6 @@ packages:
   ./
   modules/ouroboros-network-ogmios
   modules/contra-tracers
-  modules/fast-bech32
   modules/git-th
   modules/hjsonpointer
   modules/hjsonschema
@@ -57,9 +57,6 @@ package ouroboros-network-ogmios
   tests: false
 
 package git-th
-  tests: false
-
-package fast-bech32
   tests: false
 
 package hspec-json-schema
