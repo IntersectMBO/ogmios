@@ -30,6 +30,8 @@ module Cardano.Network.Protocol.NodeToClient
     , cStateQueryCodec
     , cTxMonitorCodec
     , nodeToClientV_Latest
+    , nodeToClientVersions
+    , nodeToClientVersionNumber
 
     -- * Running
     , runPeer
@@ -67,6 +69,9 @@ import Cardano.Network.Protocol.NodeToClient.Trace
 import Cardano.Slotting.Slot
     ( SlotNo
     )
+import Codec.CBOR.Term
+    ( Term (TInt)
+    )
 import Control.DeepSeq
     ( NFData
     )
@@ -88,6 +93,9 @@ import Control.Tracer
     ( Tracer (..)
     , contramap
     , nullTracer
+    )
+import Data.Bits
+    ( clearBit
     )
 import Data.ByteString.Lazy
     ( ByteString
@@ -159,6 +167,9 @@ import Ouroboros.Network.Channel
     ( Channel
     , hoistChannel
     )
+import Ouroboros.Network.CodecCBORTerm
+    ( CodecCBORTerm (..)
+    )
 import Ouroboros.Network.Driver.Simple
     ( TraceSendRecv
     , runPeer
@@ -180,6 +191,7 @@ import Cardano.Network.NodeToClient
     , connectTo
     , localSnocket
     , nodeToClientProtocols
+    , nodeToClientVersionCodec
     , withIOManager
     )
 import Ouroboros.Network.Protocol.ChainSync.ClientPipelined
@@ -290,7 +302,7 @@ connectClient tr client vData addr = liftIO $ withIOManager $ \iocp -> do
   where
     versions = combineVersions
         [ simpleSingletonVersions v vData (client v)
-        | v <- [ nodeToClientV_Min .. nodeToClientV_Latest ]
+        | v <- nodeToClientVersions
         ]
 
     tracers = NetworkConnectTracers
@@ -302,7 +314,19 @@ nodeToClientV_Latest :: NodeToClientVersion
 nodeToClientV_Latest = maxBound
 
 nodeToClientV_Min :: NodeToClientVersion
-nodeToClientV_Min = NodeToClientV_17
+nodeToClientV_Min = NodeToClientV_23
+
+-- | Node-to-client versions that Ogmios proposes during the handshake.
+nodeToClientVersions :: [NodeToClientVersion]
+nodeToClientVersions = [ nodeToClientV_Min .. nodeToClientV_Latest ]
+
+-- | Version number as sent in the handshake, without the node-to-client flag
+-- (bit 15). Unknown versions in a handshake refusal use the same numbering.
+nodeToClientVersionNumber :: NodeToClientVersion -> Maybe Int
+nodeToClientVersionNumber v =
+    case encodeTerm nodeToClientVersionCodec v of
+        TInt n -> Just (n `clearBit` 15)
+        _unexpectedTerm -> Nothing
 
 -- | Construct a network client
 mkClient

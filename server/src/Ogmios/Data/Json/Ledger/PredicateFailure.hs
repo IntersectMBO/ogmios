@@ -6,17 +6,24 @@ module Ogmios.Data.Json.Ledger.PredicateFailure where
 
 import Ogmios.Data.Json.Prelude
 
+import Cardano.Ledger.BaseTypes
+    ( Exclusive (..)
+    , Inclusive (..)
+    )
 import Ogmios.Data.Ledger
     ( DiscriminatedEntities (..)
     , TxOutInAnyEra (..)
     , ValueInAnyEra (..)
     )
 import Ogmios.Data.Ledger.PredicateFailure
-    ( ContextErrorInAnyEra (..)
+    ( AccountBalanceInterval (..)
+    , BalanceSnapshot (..)
+    , ContextErrorInAnyEra (..)
     , MultiEraPredicateFailure (..)
     , ScriptPurposeIndexInAnyEra (..)
     , ScriptPurposeItemInAnyEra (..)
     , TagMismatchDescription (..)
+    , VRFVerKeyHash (..)
     )
 
 import qualified Codec.Json.Rpc as Rpc
@@ -612,10 +619,11 @@ encodePredicateFailure reject = \case
 
     IncompleteWithdrawals { withdrawals } ->
         reject (predicateFailureCode 41)
-            "The transaction contains incomplete or invalid rewards withdrawals. When present, \
-            \rewards withdrawals must consume rewards in full, there cannot be any leftover. You \
-            \may also run into this error if the associatd stake credential is not registered. \
-            \The field 'data.incompleteWithdrawals' contains a map of culprit withdrawals."
+            "Some withdrawals are incomplete or invalid. Before the Dijkstra era, and for a Dijkstra \
+            \transaction in legacy mode, a withdrawal must take the full balance of its account. \
+            \Before the Dijkstra era, this error also reports a withdrawal from a stake credential \
+            \that is not registered. The field 'data.incompleteWithdrawals' maps each culprit \
+            \reward account to the amount withdrawn."
             (pure $ encodeObject
                 ( "incompleteWithdrawals" .=
                     encodeMap Shelley.stringifyRewardAcnt encodeCoin withdrawals
@@ -624,11 +632,11 @@ encodePredicateFailure reject = \case
 
     InvalidStakePoolRetirementEpoch { currentEpoch, listedEpoch, firstInvalidEpoch } ->
         reject (predicateFailureCode 42)
-            "A stake pool retirement certificate is trying to retire too late in the future. Indeed, \
-            \there's a maximum delay for stake pool retirement, controlled by a protocol parameter. \
-            \The field 'data.currentEpoch' indicates the current epoch known of the ledger, \
-            \'data.declaredEpoch' refers to the epoch declared in the retirement certificate and \
-            \'data.firstInvalidEpoch' is the first epoch considered invalid (too far) for retirement"
+            "A stake pool retirement certificate lists an invalid retirement epoch. The epoch must \
+            \be after the current epoch and before 'data.firstInvalidEpoch'. A protocol parameter \
+            \sets the maximum delay for retirement. The field 'data.currentEpoch' is the current \
+            \epoch, 'data.declaredEpoch' is the epoch listed in the certificate, and \
+            \'data.firstInvalidEpoch' is the first epoch too far in the future for retirement."
             (pure $ encodeObject
                 ( "currentEpoch" .=
                     encodeEpochNo currentEpoch
@@ -977,6 +985,126 @@ encodePredicateFailure reject = \case
             "Some proposals contain empty treasury withdrawals, which is pointless and a waste of resources."
             Nothing
 
+    MissingRequiredGuards { missingGuards } ->
+        reject (predicateFailureCode 69)
+            "Some guards required by the transaction or by its sub-transactions are missing from the \
+            \top-level transaction. Any credential (key hash or script) listed as a required top-level \
+            \guard must also appear in the 'guards' of the top-level transaction. The field \
+            \'data.missingGuards' lists the required credentials that are absent."
+            (pure $ encodeObject
+                ( "missingGuards" .=
+                    encodeFoldable (encodeObject . Shelley.encodeCredential "credential") missingGuards
+                )
+            )
+
+    MalformedGuardDatums { malformedGuards } ->
+        reject (predicateFailureCode 70)
+            "Some required top-level guards have a malformed datum. A required guard that resolves \
+            \to a Plutus script must come with a datum, whereas a guard that is a key hash or resolves \
+            \to a native script must not have one. The field 'data.malformedGuards' lists the \
+            \offending credentials."
+            (pure $ encodeObject
+                ( "malformedGuards" .=
+                    encodeFoldable (encodeObject . Shelley.encodeCredential "credential") malformedGuards
+                )
+            )
+
+    PtrPresentInCollateralReturn { collateralReturn } ->
+        reject (predicateFailureCode 71)
+            "The collateral return output is sent to a pointer address. Since the Dijkstra era, \
+            \pointer addresses are no longer allowed in collateral return outputs. The field \
+            \'data.collateralReturn' contains the offending output."
+            (pure $ encodeObject
+                ( "collateralReturn" .=
+                    encodeTxOutInAnyEra collateralReturn
+                )
+            )
+
+    BlsKeyInvalidProofOfPossession { poolId, blsKey } ->
+        reject (predicateFailureCode 72)
+            "A stake pool registration carries a BLS key with an invalid proof of possession. The \
+            \proof must show possession of the signing key that matches the BLS verification key. \
+            \The field 'data.stakePool.id' indicates the stake pool, and 'data.blsKey' contains \
+            \the key and proof found in the certificate."
+            (pure $ encodeObject
+                ( "stakePool" .=
+                    encodeSingleton "id" (Shelley.encodePoolId poolId)
+               <> "blsKey" .=
+                    Shelley.encodeBlsKey blsKey
+                )
+            )
+
+    AllInputsAreSpent ->
+        reject (predicateFailureCode 73)
+            "All inputs of the transaction are already spent. This usually means that the \
+            \transaction has already been included in the ledger, so there's no need to submit \
+            \it again."
+            Nothing
+
+    WithdrawalsExceedingOriginalBalance { excessiveWithdrawals } ->
+        reject (predicateFailureCode 74)
+            "Some withdrawals exceed the balance of their account. A withdrawal may take any amount \
+            \up to the account balance, but the total withdrawn from an account across the whole \
+            \batch (the top-level transaction and its sub-transactions) must not exceed the balance \
+            \at the start of the batch. In legacy mode, only withdrawals from sub-transactions count \
+            \towards that total. The field 'data.excessiveWithdrawals' lists, for each account, the \
+            \total withdrawn and the balance at the start of the batch."
+            (pure $ encodeObject
+                ( "excessiveWithdrawals" .=
+                    encodeMapAsList
+                        (\account (withdrawn, balance) -> encodeObject
+                            ( "account" .=
+                                Shelley.encodeRewardAcnt account
+                           <> "withdrawn" .=
+                                encodeCoin withdrawn
+                           <> "balance" .=
+                                encodeCoin balance
+                            )
+                        )
+                        excessiveWithdrawals
+                )
+            )
+
+    BalancesOutsideAccountBalanceIntervals { checkedAgainst, balancesOutsideIntervals } ->
+        reject (predicateFailureCode 75)
+            "Some account balances fall outside the intervals asserted by the transaction. An \
+            \interval has an inclusive lower bound and an exclusive upper bound, or asserts an \
+            \exact balance. The field 'data.checkedAgainst' tells which balances were checked: \
+            \'batchStart' for the balances at the start of the batch, or 'transaction' for the \
+            \balances seen by the (sub-)transaction that asserts the interval. The field \
+            \'data.balancesOutsideIntervals' lists each account with its balance and the interval \
+            \it doesn't satisfy."
+            (pure $ encodeObject
+                ( "checkedAgainst" .=
+                    encodeBalanceSnapshot checkedAgainst
+               <> "balancesOutsideIntervals" .=
+                    encodeMapAsList
+                        (\account (balance, interval) -> encodeObject
+                            ( "account" .=
+                                Shelley.encodeRewardAcnt account
+                           <> "balance" .=
+                                encodeCoin balance
+                           <> "interval" .=
+                                encodeAccountBalanceInterval interval
+                            )
+                        )
+                        balancesOutsideIntervals
+                )
+            )
+
+    StakePoolVrfKeyAlreadyRegistered { poolId, vrfKeyHash } ->
+        reject (predicateFailureCode 76)
+            "A stake pool registration or update uses a VRF key that another stake pool already \
+            \uses. Each stake pool needs its own VRF key. The field 'data.stakePool.id' indicates \
+            \the stake pool, and 'data.vrfVerificationKeyHash' is the hash of the VRF key in use."
+            (pure $ encodeObject
+                ( "stakePool" .=
+                    encodeSingleton "id" (Shelley.encodePoolId poolId)
+               <> "vrfVerificationKeyHash" .=
+                    Shelley.encodeHash (unVRFVerKeyHash vrfKeyHash)
+                )
+            )
+
     -- NOTE: This should match the encoding also used for 'EvaluateTransactionResponse' in
     -- Data.Protocol.TxSubmission; hence the code.
     UnableToCreateScriptContext { translationError } ->
@@ -1006,6 +1134,26 @@ encodePredicateFailure reject = \case
             \data-types are modeled. If you ever run into this, please report the issue as you've \
             \likely discoverd a critical bug..."
             Nothing
+
+encodeBalanceSnapshot :: BalanceSnapshot -> Json
+encodeBalanceSnapshot = encodeText . \case
+    BatchStartBalances ->
+        "batchStart"
+    TransactionBalances ->
+        "transaction"
+
+encodeAccountBalanceInterval :: AccountBalanceInterval era -> Json
+encodeAccountBalanceInterval = encodeObject . \case
+    AccountBalanceLowerBound (Inclusive lowerBound) ->
+        "lowerBound" .= encodeCoin lowerBound
+    AccountBalanceUpperBound (Exclusive upperBound) ->
+        "upperBound" .= encodeCoin upperBound
+    AccountBalanceBothBounds (Inclusive lowerBound) (Exclusive upperBound) ->
+        "lowerBound" .= encodeCoin lowerBound
+        <>
+        "upperBound" .= encodeCoin upperBound
+    AccountBalanceExact exact ->
+        "exact" .= encodeCoin exact
 
 encodeTagMismatchDescription :: TagMismatchDescription -> Json
 encodeTagMismatchDescription = encodeText . \case

@@ -68,6 +68,9 @@ import Cardano.Ledger.Conway
 import Cardano.Ledger.Conway.Tx
     ( unConwayTx
     )
+import Cardano.Ledger.Dijkstra
+    ( ApplyTxError (DijkstraApplyTxError)
+    )
 import Cardano.Ledger.Dijkstra.Tx
     ( unDijkstraTx
     )
@@ -153,6 +156,7 @@ import qualified Ogmios.Data.Ledger.PredicateFailure.Allegra as Allegra
 import qualified Ogmios.Data.Ledger.PredicateFailure.Alonzo as Alonzo
 import qualified Ogmios.Data.Ledger.PredicateFailure.Babbage as Babbage
 import qualified Ogmios.Data.Ledger.PredicateFailure.Conway as Conway
+import qualified Ogmios.Data.Ledger.PredicateFailure.Dijkstra as Dijkstra
 import qualified Ogmios.Data.Ledger.PredicateFailure.Mary as Mary
 import qualified Ogmios.Data.Ledger.PredicateFailure.Shelley as Shelley
 
@@ -232,8 +236,9 @@ encodeSubmitTransactionError reject = \case
             (Shelley.encodeLedgerFailure <$> xs)
     ApplyTxErrByron{} ->
         error "encodeSubmitTransactionError: unsupported Byron transaction."
-    ApplyTxErrDijkstra{} ->
-        error "encodeSubmitTransactionError: Dijkstra submission errors not yet wired."
+    ApplyTxErrDijkstra (DijkstraApplyTxError xs) ->
+        (encodePredicateFailure reject . pickPredicateFailure)
+            (Dijkstra.encodeMempoolFailure <$> xs)
 
 encodeSerializedTransaction
     :: (PraosCrypto crypto, TPraos.PraosCrypto crypto)

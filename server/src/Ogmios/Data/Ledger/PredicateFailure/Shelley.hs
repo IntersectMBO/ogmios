@@ -10,7 +10,9 @@ import Cardano.Ledger.Address
     ( unWithdrawals
     )
 import Cardano.Ledger.BaseTypes
-    ( Mismatch (..)
+    ( EpochInterval (..)
+    , Mismatch (..)
+    , addEpochInterval
     , mismatchSupplied
     )
 import Cardano.Ledger.Core
@@ -154,8 +156,11 @@ encodePoolFailure
 encodePoolFailure = \case
     Sh.StakePoolNotRegisteredOnKeyPOOL poolId ->
         UnknownStakePool { poolId }
-    Sh.StakePoolRetirementWrongEpochPOOL (Mismatch currentEpoch listedEpoch) (Mismatch _ firstInvalidEpoch) ->
-        InvalidStakePoolRetirementEpoch { currentEpoch, listedEpoch, firstInvalidEpoch }
+    Sh.StakePoolRetirementWrongEpochPOOL
+        Mismatch { mismatchSupplied = listedEpoch, mismatchExpected = currentEpoch }
+        Mismatch { mismatchExpected = lastValidEpoch } ->
+            let firstInvalidEpoch = addEpochInterval lastValidEpoch (EpochInterval 1) in
+            InvalidStakePoolRetirementEpoch { currentEpoch, listedEpoch, firstInvalidEpoch }
     Sh.StakePoolCostTooLowPOOL (Mismatch declaredCost minimumPoolCost) ->
         StakePoolCostTooLow { declaredCost, minimumPoolCost }
     Sh.WrongNetworkPOOL (Mismatch _ expectedNetwork) poolId ->
@@ -163,17 +168,14 @@ encodePoolFailure = \case
         NetworkMismatch { expectedNetwork, invalidEntities }
     Sh.PoolMedataHashTooBig poolId computedMetadataHashSize ->
         StakePoolMetadataHashTooLarge { poolId, computedMetadataHashSize }
-    -- TODO: VRF-key reuse across pool registrations isn't represented
-    -- distinctly in MultiEraPredicateFailure; fold into UnknownStakePool
-    -- referencing the conflicting poolId for now.
-    Sh.VRFKeyHashAlreadyRegistered poolId _vrfKeyHash ->
-        UnknownStakePool { poolId }
+    Sh.VRFKeyHashAlreadyRegistered poolId vrfKeyHash ->
+        StakePoolVrfKeyAlreadyRegistered { poolId, vrfKeyHash }
 
 encodeDelegFailure
     :: Sh.ShelleyDelegPredFailure era
     -> MultiEraPredicateFailure
 encodeDelegFailure = \case
-    Sh.StakeKeyAlreadyRegisteredDELEG credential ->
+    Sh.DelegAccountAlreadyRegistered (Sh.AccountAlreadyRegistered credential) ->
         StakeCredentialAlreadyRegistered credential
     Sh.StakeKeyNotRegisteredDELEG credential ->
         StakeCredentialNotRegistered credential

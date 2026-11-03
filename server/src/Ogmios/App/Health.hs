@@ -97,6 +97,8 @@ import Cardano.Network.Protocol.NodeToClient
     , NodeToClientVersion
     , connectClient
     , mkClient
+    , nodeToClientVersionNumber
+    , nodeToClientVersions
     )
 import Data.Aeson
     ( ToJSON (..)
@@ -319,6 +321,16 @@ connectHealthCheckClient tr embed (HealthCheckClient clients) = do
                 , "it runs on a different network!"
                 , hint
                 ]
+        HandshakeError (Handshake.VersionMismatch knownVersions unknownVersions) -> do
+            let offeredVersions = sort $ mapMaybe nodeToClientVersionNumber knownVersions <> unknownVersions
+            let supportedVersions = mapMaybe nodeToClientVersionNumber nodeToClientVersions
+            throwIO $ HandshakeException $ unwords
+                [ "Unable to establish the connection with the cardano-node:"
+                , "it has no node-to-client version in common with Ogmios."
+                , "The cardano-node offers versions:", prettyVersions offeredVersions <> "."
+                , "Ogmios supports versions:", prettyVersions supportedVersions <> "."
+                , "Use a more recent cardano-node."
+                ]
         e ->
             throwIO e
       where
@@ -326,6 +338,11 @@ connectHealthCheckClient tr embed (HealthCheckClient clients) = do
         prettyNetwork :: Text -> Text
         prettyNetwork =
             networkMagicToNetworkName . NetworkMagic . fromMaybe maxBound . readMaybe @Word32 . toString
+
+        prettyVersions :: [Int] -> Text
+        prettyVersions = \case
+            [] -> "none"
+            versions -> T.intercalate ", " (show <$> versions)
 
 --
 -- Ouroboros clients
