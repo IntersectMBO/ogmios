@@ -339,7 +339,7 @@ encodeUtxoFailure = \case
 
 encodeUtxosFailure
     :: forall era.
-        ( HasPlutus era ~ True
+        ( PlutusEraConstraints era
         )
     => ShelleyBasedEra era
     -> Cn.ConwayUtxosPredFailure era

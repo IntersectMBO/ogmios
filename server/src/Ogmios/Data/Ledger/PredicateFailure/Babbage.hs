@@ -55,8 +55,7 @@ encodeLedgerFailure = \case
 
 encodeUtxowFailure ::
     forall era.
-    ( Era era
-    , HasPlutus era ~ True
+    ( PlutusEraConstraints era
     , PredicateFailure (EraRule "UTXO" era) ~ Ba.BabbageUtxoPredFailure era
     ) =>
     ShelleyBasedEra era ->

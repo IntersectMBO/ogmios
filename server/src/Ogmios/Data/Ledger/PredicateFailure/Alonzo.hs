@@ -74,7 +74,7 @@ encodeLedgerFailure = \case
 
 encodeUtxowFailure
     :: forall era.
-        ( HasPlutus era ~ True
+        ( PlutusEraConstraints era
         )
     => ShelleyBasedEra era
     -> (PredicateFailure (EraRule "UTXO" era) -> MultiEraPredicateFailure)
@@ -168,7 +168,7 @@ encodeUtxoFailure era encodeUtxosFailure' = \case
 
 encodeUtxosFailure
     :: forall era.
-        ( HasPlutus era ~ True
+        ( PlutusEraConstraints era
         )
     => ShelleyBasedEra era
     -> Al.AlonzoUtxosPredFailure era
@@ -183,7 +183,7 @@ encodeUtxosFailure era = \case
 
 encodeCollectErrors
     :: forall era.
-        ( HasPlutus era ~ True
+        ( PlutusEraConstraints era
         )
     => ShelleyBasedEra era
     -> [CollectError era]

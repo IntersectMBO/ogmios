@@ -87,14 +87,15 @@ module Ogmios.Prelude (
     EraIndex (..),
     ShelleyBasedEra (..),
     IsShelleyBasedEra (..),
-    HasPlutus,
     PlutusEraConstraints,
-    plutusEraConstraints,
     fromEraIndex,
 ) where
 
 import Cardano.Ledger.Alonzo.Plutus.Context (
     EraPlutusContext,
+ )
+import Cardano.Ledger.Alonzo.Scripts (
+    AlonzoScript,
  )
 import Cardano.Ledger.Api.Era (
     DijkstraEra,
@@ -107,6 +108,7 @@ import Cardano.Ledger.Core (
     ByronEra,
     Era,
     EraTxCert,
+    Script,
  )
 import Data.Aeson (
     ToJSON (..),
@@ -306,35 +308,13 @@ deriving instance Show (ShelleyBasedEra era)
 deriving instance Eq (ShelleyBasedEra era)
 deriving instance Ord (ShelleyBasedEra era)
 
--- | Whether an era has Plutus scripts.
-type family HasPlutus era :: Bool where
-    HasPlutus ShelleyEra = False
-    HasPlutus AllegraEra = False
-    HasPlutus MaryEra = False
-    HasPlutus AlonzoEra = True
-    HasPlutus BabbageEra = True
-    HasPlutus ConwayEra = True
-    HasPlutus DijkstraEra = True
-
--- | Ledger classes of the eras with Plutus scripts.
+-- | Ledger classes of the eras with Plutus scripts. The script equality also
+-- lets GHC rule out pre-Alonzo eras when matching on 'ShelleyBasedEra'.
 type PlutusEraConstraints era =
     ( EraPlutusContext era
     , EraTxCert era
+    , Script era ~ AlonzoScript era
     )
-
--- | Bring the Plutus ledger classes into scope.
-plutusEraConstraints ::
-    (HasPlutus era ~ True) =>
-    -- | An era from Alonzo onwards
-    ShelleyBasedEra era ->
-    -- | Code that needs the Plutus classes
-    ((PlutusEraConstraints era) => r) ->
-    r
-plutusEraConstraints = \case
-    ShelleyBasedEraAlonzo -> \x -> x
-    ShelleyBasedEraBabbage -> \x -> x
-    ShelleyBasedEraConway -> \x -> x
-    ShelleyBasedEraDijkstra -> \x -> x
 
 data SomeShelleyEra
     = forall era. SomeShelleyEra (ShelleyBasedEra era)

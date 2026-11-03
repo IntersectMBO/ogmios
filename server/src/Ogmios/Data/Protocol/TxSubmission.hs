@@ -419,7 +419,6 @@ type CanEvaluateScriptsInEra era =
     , BabbageEraTxBody era
     , EraPlutusContext era
     , EraUTxO era
-    , HasPlutus era ~ True
     , IsShelleyBasedEra era
     , ScriptsNeeded era ~ AlonzoScriptsNeeded era
     , Script era ~ AlonzoScript era

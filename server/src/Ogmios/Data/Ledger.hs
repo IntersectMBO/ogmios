@@ -69,7 +69,7 @@ data TxOutInAnyEra
 
 data ScriptPurposeItemInAnyEra
     = forall era.
-        (HasPlutus era ~ True) =>
+        (PlutusEraConstraints era) =>
       ScriptPurposeItemInAnyEra
         ( ShelleyBasedEra era
         , PlutusPurpose AsItem era
@@ -77,7 +77,7 @@ data ScriptPurposeItemInAnyEra
 
 data ScriptPurposeIndexInAnyEra
     = forall era.
-        (HasPlutus era ~ True) =>
+        (PlutusEraConstraints era) =>
       ScriptPurposeIndexInAnyEra
         ( ShelleyBasedEra era
         , PlutusPurpose AsIx era
@@ -112,12 +112,12 @@ scriptPurposeInMostRecentEra = \case
 
 data ContextErrorInAnyEra
     = forall era.
-        (HasPlutus era ~ True) =>
+        (PlutusEraConstraints era) =>
       ContextErrorInAnyEra
         ( ShelleyBasedEra era
         , ContextError era
         )
 
 instance Show ContextErrorInAnyEra where
-    show (ContextErrorInAnyEra (era, e)) =
-        plutusEraConstraints era $ show e
+    show (ContextErrorInAnyEra (_, e)) =
+        show e
