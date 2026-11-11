@@ -2,7 +2,85 @@
 , "$id": "cardano.json"
 , "title": "Cardano"
 , "definitions":
-  { "Address":
+  { "AccountBalanceInterval":
+    { "title": "AccountBalanceInterval"
+    , "description": "A constraint on the balance of an account (a.k.a. reward account). The transaction is only valid when the balance falls within the interval."
+    , "oneOf":
+      [ { "type": "object"
+        , "title": "AccountBalanceIntervalAtLeast"
+        , "description": "Minimum (inclusive) balance of the account."
+        , "additionalProperties": false
+        , "required": [ "from", "credential", "atLeast" ]
+        , "properties":
+          { "from":
+            { "$ref": "cardano.json#/definitions/CredentialOrigin"
+            }
+          , "credential":
+            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+            }
+          , "atLeast":
+            { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
+            }
+          }
+        }
+      , { "type": "object"
+        , "title": "AccountBalanceIntervalAtMost"
+        , "description": "Maximum (exclusive) balance of the account."
+        , "additionalProperties": false
+        , "required": [ "from", "credential", "atMost" ]
+        , "properties":
+          { "from":
+            { "$ref": "cardano.json#/definitions/CredentialOrigin"
+            }
+          , "credential":
+            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+            }
+          , "atMost":
+            { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
+            }
+          }
+        }
+      , { "type": "object"
+        , "title": "AccountBalanceIntervalWithin"
+        , "description": "Minimum (inclusive) and maximum (exclusive) balances of the account."
+        , "additionalProperties": false
+        , "required": [ "from", "credential", "atLeast", "atMost" ]
+        , "properties":
+          { "from":
+            { "$ref": "cardano.json#/definitions/CredentialOrigin"
+            }
+          , "credential":
+            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+            }
+          , "atLeast":
+            { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
+            }
+          , "atMost":
+            { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
+            }
+          }
+        }
+      , { "type": "object"
+        , "title": "AccountBalanceIntervalExactly"
+        , "description": "Exact balance of the account."
+        , "additionalProperties": false
+        , "required": [ "from", "credential", "exactly" ]
+        , "properties":
+          { "from":
+            { "$ref": "cardano.json#/definitions/CredentialOrigin"
+            }
+          , "credential":
+            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+            }
+          , "exactly":
+            { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
+            }
+          }
+        }
+      ]
+    }
+
+  , "Address":
     { "title": "Address"
     , "type": "string"
     , "description": "A Cardano address (either legacy format or new format)."
@@ -816,6 +894,12 @@
       [ "verificationKey"
       , "script"
       ]
+    }
+
+  , "Credits":
+    { "title": "Credits"
+    , "description": "Amounts paid directly into accounts (a.k.a. reward accounts), as direct deposits. The opposite of withdrawals."
+    , "$ref": "cardano.json#/definitions/Withdrawals"
     }
 
   , "Datum":
@@ -2782,6 +2866,117 @@
       ]
     }
 
+  , "SubTransaction":
+    { "title": "SubTransaction"
+    , "description": "A transaction nested inside another (top-level) transaction. It has no fee and no collaterals of its own. From Dijkstra onwards."
+    , "type": "object"
+    , "additionalProperties": false
+    , "required": [ "id", "inputs", "outputs", "signatories" ]
+    , "properties":
+      { "id":
+        { "$ref": "cardano.json#/definitions/Digest<Blake2b, 256>"
+        }
+      , "inputs":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/TransactionOutputReference" }
+        }
+      , "references":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/TransactionOutputReference" }
+        }
+      , "outputs":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/TransactionOutput" }
+        }
+      , "certificates":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/Certificate" }
+        }
+      , "withdrawals":
+        { "$ref": "cardano.json#/definitions/Withdrawals"
+        }
+      , "credits":
+        { "$ref": "cardano.json#/definitions/Credits"
+        }
+      , "mint":
+        { "$ref": "cardano.json#/definitions/Assets"
+        }
+      , "requiredExtraSignatories":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
+        }
+      , "requiredExtraScripts":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
+        }
+      , "guards":
+        { "type": "array"
+        , "description": "Hashes of scripts which must run and succeed for the sub-transaction to be valid."
+        , "items": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
+        }
+      , "topLevelGuards":
+        { "type": "array"
+        , "description": "Guards (keys or scripts) that the top-level transaction must list in its own guards."
+        , "items": { "$ref": "cardano.json#/definitions/TopLevelGuard" }
+        }
+      , "network":
+        { "$ref": "cardano.json#/definitions/Network"
+        }
+      , "scriptIntegrityHash":
+        { "$ref": "cardano.json#/definitions/Digest<Blake2b, 256>"
+        }
+      , "validityInterval":
+        { "$ref": "cardano.json#/definitions/ValidityInterval"
+        }
+      , "proposals":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/GovernanceProposal" }
+        }
+      , "votes":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/GovernanceVote" }
+        }
+      , "treasury":
+        { "type": "object"
+        , "additionalProperties": false
+        , "properties":
+          { "value": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+          , "donation": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+          }
+        }
+      , "accountBalanceIntervals":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/AccountBalanceInterval" }
+        }
+      , "metadata":
+        { "$ref": "cardano.json#/definitions/Metadata"
+        }
+      , "signatories":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/Signatory" }
+        }
+      , "scripts":
+        { "type": "object"
+        , "propertyNames": { "contentEncoding": "base16", "pattern": "^[0-9a-f]+$" }
+        , "additionalProperties": { "$ref": "cardano.json#/definitions/Script" }
+        }
+      , "datums":
+        { "type": "object"
+        , "propertyNames": { "contentEncoding": "base16", "pattern": "^[0-9a-f]+$" }
+        , "additionalProperties": { "$ref": "cardano.json#/definitions/Datum" }
+        }
+      , "redeemers":
+        { "type": "array"
+        , "items": { "$ref": "cardano.json#/definitions/Redeemer" }
+        }
+      , "cbor":
+        { "type": "string"
+        , "contentEncoding": "base16"
+        , "description": "The raw serialized (CBOR) sub-transaction. Use --include-transaction-cbor to ALWAYS include the 'cbor' field. Omitted otherwise."
+        }
+      }
+    }
+
   , "Tip":
     { "title": "Tip"
     , "type": "object"
@@ -2791,6 +2986,25 @@
       { "slot": { "$ref": "cardano.json#/definitions/Slot" }
       , "id": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 256>" }
       , "height": { "$ref": "cardano.json#/definitions/BlockHeight" }
+      }
+    }
+
+  , "TopLevelGuard":
+    { "title": "TopLevelGuard"
+    , "description": "A guard (key or script) that the top-level transaction must list among its own guards (under 'requiredExtraSignatories' for keys, 'guards' for scripts). Plutus script guards come with a datum."
+    , "type": "object"
+    , "additionalProperties": false
+    , "required": [ "from", "credential" ]
+    , "properties":
+      { "from":
+        { "$ref": "cardano.json#/definitions/CredentialOrigin"
+        }
+      , "credential":
+        { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+        }
+      , "datum":
+        { "$ref": "cardano.json#/definitions/Datum"
+        }
       }
     }
 
@@ -2835,6 +3049,9 @@
       , "withdrawals":
         { "$ref": "cardano.json#/definitions/Withdrawals"
         }
+      , "credits":
+        { "$ref": "cardano.json#/definitions/Credits"
+        }
       , "fee":
         { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
         }
@@ -2857,6 +3074,16 @@
       , "requiredExtraScripts":
         { "type": "array"
         , "items": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
+        }
+      , "guards":
+        { "type": "array"
+        , "description": "Hashes of scripts which must run and succeed for the transaction to be valid. From Dijkstra onwards."
+        , "items": { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>" }
+        }
+      , "topLevelGuards":
+        { "type": "array"
+        , "description": "Guards (keys or scripts) that this transaction must list in its own guards. From Dijkstra onwards."
+        , "items": { "$ref": "cardano.json#/definitions/TopLevelGuard" }
         }
       , "proposals":
         { "type": "array"
@@ -2894,6 +3121,21 @@
           { "value": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
           , "donation": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
           }
+        }
+      , "accountBalanceIntervals":
+        { "type": "array"
+        , "description": "Constraints on account balances, checked against the balances at the time the transaction is applied. From Dijkstra onwards."
+        , "items": { "$ref": "cardano.json#/definitions/AccountBalanceInterval" }
+        }
+      , "startingAccountBalanceIntervals":
+        { "type": "array"
+        , "description": "Constraints on account balances, checked against the balances before the transaction and its sub-transactions are applied. From Dijkstra onwards."
+        , "items": { "$ref": "cardano.json#/definitions/AccountBalanceInterval" }
+        }
+      , "subTransactions":
+        { "type": "array"
+        , "description": "Transactions nested in this one. From Dijkstra onwards."
+        , "items": { "$ref": "cardano.json#/definitions/SubTransaction" }
         }
       , "cbor":
         { "type": "string"
