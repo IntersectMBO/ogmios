@@ -551,7 +551,7 @@ encodeTx (fmt, opts) x =
             <> encodeTxBody (Al.atBody x) (strictMaybe mempty (Map.keys . snd) auxiliary)
             <> "metadata"
             .=? OmitWhenNothing fst auxiliary
-            <> encodeWitnessSet opts (snd <$> auxiliary) encodeScriptPurposeIndex (Al.atWits x)
+            <> encodeWitnessSet (encodeScript opts) (snd <$> auxiliary) encodeScriptPurposeIndex (Al.atWits x)
             <> if includeTransactionCbor opts
                 then
                     "cbor" .= encodeByteStringBase16 (encodeCbor @AlonzoEra x)
@@ -665,16 +665,13 @@ encodeScriptIntegrityHash =
     Shelley.encodeHash . Ledger.extractHash
 
 encodeWitnessSet ::
-    ( Ledger.Script era ~ Al.AlonzoScript era
-    , Al.AlonzoEraScript era
-    , Ledger.NativeScript era ~ Timelock era
-    ) =>
-    IncludeCbor ->
+    (Al.AlonzoEraScript era) =>
+    (Ledger.Script era -> Json) ->
     StrictMaybe (AuxiliaryScripts era) ->
     (PlutusPurpose AsIx era -> Json) ->
     Al.AlonzoTxWits era ->
     Series
-encodeWitnessSet opts (fromSMaybe mempty -> auxScripts) encodeScriptPurposeIndexInEra x =
+encodeWitnessSet encodeScriptInEra (fromSMaybe mempty -> auxScripts) encodeScriptPurposeIndexInEra x =
     "signatories"
         .= encodeFoldable2
             Shelley.encodeBootstrapWitness
@@ -684,7 +681,7 @@ encodeWitnessSet opts (fromSMaybe mempty -> auxScripts) encodeScriptPurposeIndex
         <> "scripts"
         .=? OmitWhen
             null
-            (encodeMap Shelley.stringifyScriptHash (encodeScript opts))
+            (encodeMap Shelley.stringifyScriptHash encodeScriptInEra)
             (Al.txscripts x <> auxScripts)
         <> "datums"
         .=? OmitWhen

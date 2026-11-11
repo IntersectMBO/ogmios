@@ -275,7 +275,7 @@ encodeTx (fmt, opts) x =
        <>
         "metadata" .=? OmitWhenNothing fst auxiliary
        <>
-        Alonzo.encodeWitnessSet opts (snd <$> auxiliary) Alonzo.encodeScriptPurposeIndex (Ba.atWits x)
+        Alonzo.encodeWitnessSet (Alonzo.encodeScript opts) (snd <$> auxiliary) Alonzo.encodeScriptPurposeIndex (Ba.atWits x)
        <>
         if includeTransactionCbor opts then
            "cbor" .= encodeByteStringBase16 (encodeCbor @BabbageEra x)
