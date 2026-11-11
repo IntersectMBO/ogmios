@@ -151,6 +151,14 @@ export type AddressAttributes = string;
  * Plutus data, CBOR-serialised.
  */
 export type RedeemerData = string;
+/**
+ * A constraint on the balance of an account (a.k.a. reward account). The transaction is only valid when the balance falls within the interval.
+ */
+export type AccountBalanceInterval =
+  | AccountBalanceIntervalAtLeast
+  | AccountBalanceIntervalAtMost
+  | AccountBalanceIntervalWithin
+  | AccountBalanceIntervalExactly;
 export type BootstrapProtocolId = number;
 export type GenesisHash = "genesis";
 export type VrfProof = string;
@@ -607,6 +615,7 @@ export interface Transaction {
   outputs: TransactionOutput[];
   certificates?: Certificate[];
   withdrawals?: Withdrawals;
+  credits?: Credits;
   fee?: ValueAdaOnly;
   validityInterval?: ValidityInterval;
   mint?: Assets;
@@ -614,6 +623,14 @@ export interface Transaction {
   scriptIntegrityHash?: DigestBlake2B256;
   requiredExtraSignatories?: DigestBlake2B224[];
   requiredExtraScripts?: DigestBlake2B224[];
+  /**
+   * Hashes of scripts which must run and succeed for the transaction to be valid. From Dijkstra onwards.
+   */
+  guards?: DigestBlake2B224[];
+  /**
+   * Guards (keys or scripts) that this transaction must list in its own guards. From Dijkstra onwards.
+   */
+  topLevelGuards?: TopLevelGuard[];
   proposals?: GovernanceProposal[];
   votes?: GovernanceVote[];
   metadata?: Metadata;
@@ -629,6 +646,18 @@ export interface Transaction {
     value?: ValueAdaOnly;
     donation?: ValueAdaOnly;
   };
+  /**
+   * Constraints on account balances, checked against the balances at the time the transaction is applied. From Dijkstra onwards.
+   */
+  accountBalanceIntervals?: AccountBalanceInterval[];
+  /**
+   * Constraints on account balances, checked against the balances before the transaction and its sub-transactions are applied. From Dijkstra onwards.
+   */
+  startingAccountBalanceIntervals?: AccountBalanceInterval[];
+  /**
+   * Transactions nested in this one. From Dijkstra onwards.
+   */
+  subTransactions?: SubTransaction[];
   /**
    * The raw serialized (CBOR) transaction, as found on-chain. Use --include-transaction-cbor to ALWAYS include the 'cbor' field. Omitted otherwise.
    */
@@ -863,6 +892,12 @@ export interface DelegateRepresentativeRetirement {
 export interface Withdrawals {
   [k: string]: ValueAdaOnly;
 }
+/**
+ * Amounts paid directly into accounts (a.k.a. reward accounts), as direct deposits. The opposite of withdrawals.
+ */
+export interface Credits {
+  [k: string]: ValueAdaOnly;
+}
 export interface ValidityInterval {
   invalidBefore?: Slot;
   invalidAfter?: Slot;
@@ -871,6 +906,14 @@ export interface Assets {
   [k: string]: {
     [k: string]: AssetQuantity;
   };
+}
+/**
+ * A guard (key or script) that the top-level transaction must list among its own guards (under 'requiredExtraSignatories' for keys, 'guards' for scripts). Plutus script guards come with a datum.
+ */
+export interface TopLevelGuard {
+  from: CredentialOrigin;
+  credential: DigestBlake2B224;
+  datum?: Datum;
 }
 export interface GovernanceProposal {
   deposit?: ValueAdaOnly;
@@ -1165,6 +1208,85 @@ export interface Redeemer {
 export interface RedeemerPointer {
   purpose: "spend" | "mint" | "publish" | "withdraw" | "vote" | "propose" | "guard";
   index: UInt64;
+}
+/**
+ * Minimum (inclusive) balance of the account.
+ */
+export interface AccountBalanceIntervalAtLeast {
+  from: CredentialOrigin;
+  credential: DigestBlake2B224;
+  atLeast: ValueAdaOnly;
+}
+/**
+ * Maximum (exclusive) balance of the account.
+ */
+export interface AccountBalanceIntervalAtMost {
+  from: CredentialOrigin;
+  credential: DigestBlake2B224;
+  atMost: ValueAdaOnly;
+}
+/**
+ * Minimum (inclusive) and maximum (exclusive) balances of the account.
+ */
+export interface AccountBalanceIntervalWithin {
+  from: CredentialOrigin;
+  credential: DigestBlake2B224;
+  atLeast: ValueAdaOnly;
+  atMost: ValueAdaOnly;
+}
+/**
+ * Exact balance of the account.
+ */
+export interface AccountBalanceIntervalExactly {
+  from: CredentialOrigin;
+  credential: DigestBlake2B224;
+  exactly: ValueAdaOnly;
+}
+/**
+ * A transaction nested inside another (top-level) transaction. It has no fee and no collaterals of its own. From Dijkstra onwards.
+ */
+export interface SubTransaction {
+  id: DigestBlake2B256;
+  inputs: TransactionOutputReference[];
+  references?: TransactionOutputReference[];
+  outputs: TransactionOutput[];
+  certificates?: Certificate[];
+  withdrawals?: Withdrawals;
+  credits?: Credits;
+  mint?: Assets;
+  requiredExtraSignatories?: DigestBlake2B224[];
+  requiredExtraScripts?: DigestBlake2B224[];
+  /**
+   * Hashes of scripts which must run and succeed for the sub-transaction to be valid.
+   */
+  guards?: DigestBlake2B224[];
+  /**
+   * Guards (keys or scripts) that the top-level transaction must list in its own guards.
+   */
+  topLevelGuards?: TopLevelGuard[];
+  network?: Network;
+  scriptIntegrityHash?: DigestBlake2B256;
+  validityInterval?: ValidityInterval;
+  proposals?: GovernanceProposal[];
+  votes?: GovernanceVote[];
+  treasury?: {
+    value?: ValueAdaOnly;
+    donation?: ValueAdaOnly;
+  };
+  accountBalanceIntervals?: AccountBalanceInterval[];
+  metadata?: Metadata;
+  signatories: Signatory[];
+  scripts?: {
+    [k: string]: Script;
+  };
+  datums?: {
+    [k: string]: Datum;
+  };
+  redeemers?: Redeemer[];
+  /**
+   * The raw serialized (CBOR) sub-transaction. Use --include-transaction-cbor to ALWAYS include the 'cbor' field. Omitted otherwise.
+   */
+  cbor?: string;
 }
 /**
  * A (Byron) delegation certificate.

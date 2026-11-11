@@ -46,6 +46,14 @@ math: true
 
 - The JSON schema now lists `dijkstra` as an era name where Ogmios can return it, such as the `era` of a block and the eras in an era mismatch error. The schema also describes the `guard` clause of native scripts and the `guard` script purpose, which Dijkstra transactions can contain. The `guard` purpose appears in redeemer pointers and in the list of missing redeemers. Before, such responses did not match the schema. The schema also describes the `maxReferenceScriptsSizePerBlock` and `maxReferenceScriptsSizePerTransaction` protocol parameters of the Dijkstra era, and accepts the stake addresses that Ogmios uses as keys of the withdrawals in a `treasuryWithdrawals` governance action. Before, responses that contained them did not match the schema.
 
+- In the Dijkstra era, `nextBlock` and `nextTransaction` now return transactions with all their content, with the same fields as in the Conway era: inputs, outputs, certificates, withdrawals, mint, fee, votes, proposals, metadata, signatories, scripts, datums, redeemers, and so on. Before, a Dijkstra transaction only had `id`, `spends` and, when asked for, `cbor`. Dijkstra transactions also have new fields:
+  - `subTransactions`: the transactions nested in this one. Each has its own `id` and the same fields as a transaction, except `spends`, `fee`, `collaterals`, `collateralReturn`, `totalCollateral`, `startingAccountBalanceIntervals` and `subTransactions`.
+  - `guards`: the hashes of the scripts that guard the transaction. Guards that are keys are listed in `requiredExtraSignatories`.
+  - `topLevelGuards`: the guards that the top-level transaction must list, each with `from`, `credential` and, for Plutus scripts, a `datum`.
+  - `credits`: amounts paid directly into accounts, with the same shape as `withdrawals`.
+  - `accountBalanceIntervals`: conditions on account balances, each with `from`, `credential` and either `atLeast`, `atMost`, both, or `exactly`.
+  - `startingAccountBalanceIntervals` (top-level transactions only): the same conditions, checked against the balances before the transaction and its sub-transactions are applied.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added

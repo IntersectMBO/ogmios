@@ -22,6 +22,11 @@ module Ogmios.Data.Json.Dijkstra (
 
 import Ogmios.Data.Json.Prelude
 
+import Cardano.Ledger.Address (
+    AccountAddress (..),
+    AccountId (..),
+    DirectDeposits (..),
+ )
 import Cardano.Ledger.Alonzo.Plutus.Context (
     ContextError,
  )
@@ -39,6 +44,8 @@ import Cardano.Ledger.Plutus.TxInfo (
 
 import Cardano.Ledger.BaseTypes (
     BoundedRational (..),
+    Exclusive (..),
+    Inclusive (..),
     NonNegativeInterval,
     ProtVer,
  )
@@ -56,6 +63,7 @@ import qualified Cardano.Ledger.HKD as Ledger
 
 import qualified Cardano.Ledger.Alonzo.Plutus.TxInfo as Al
 import qualified Cardano.Ledger.Alonzo.Scripts as Al
+import qualified Cardano.Ledger.Api as Ledger
 import qualified Cardano.Ledger.Babbage.Core as Ba
 import qualified Cardano.Ledger.Babbage.TxBody as Ba
 import qualified Cardano.Ledger.Babbage.TxInfo as Ba
@@ -63,17 +71,20 @@ import qualified Cardano.Ledger.Block as Ledger
 import qualified Cardano.Ledger.Conway.Governance as Cn
 import qualified Cardano.Ledger.Conway.TxInfo as Cn
 import qualified Cardano.Ledger.Core as Ledger
+import qualified Cardano.Ledger.Credential as Ledger
 import qualified Cardano.Ledger.Dijkstra.PParams as Di
 import qualified Cardano.Ledger.Dijkstra.Scripts as Di
 import qualified Cardano.Ledger.Dijkstra.Tx as Di
+import qualified Cardano.Ledger.Dijkstra.TxBody as Di
 import qualified Cardano.Ledger.Dijkstra.TxCert as Di
 import qualified Cardano.Ledger.Dijkstra.TxInfo as Di
 import qualified Cardano.Ledger.Mary.Value as Ma
-import qualified Cardano.Ledger.Plutus.Data as Ledger
 import qualified Cardano.Ledger.Shelley.API as Sh
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
+import qualified Ogmios.Data.Json.Allegra as Allegra
 import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Conway as Conway
@@ -101,24 +112,249 @@ encodeBlock opts (ShelleyBlock (Ledger.Block blkHeader txs) headerHash) =
             .= encodeFoldable (encodeTx opts . Di.unDijkstraTx) (txs ^. Ledger.txSeqBlockBodyL)
         )
 
--- TODO(dijkstra): minimal body — emits txId, isValid, and (optionally)
--- raw CBOR. Body / witness / metadata destructuring against the new
--- DijkstraTxBody surface is a follow-up.
 encodeTx ::
     (MetadataFormat, IncludeCbor) ->
     Di.DijkstraTx Ledger.TopTx DijkstraEra ->
     Json
-encodeTx (_fmt, opts) tx@Di.DijkstraTx{Di.dtBody, Di.dtIsPhase2Valid} =
+encodeTx (fmt, opts) tx@Di.DijkstraTx{Di.dtBody, Di.dtWits, Di.dtIsPhase2Valid, Di.dtAuxData} =
     encodeObject
         ( Shelley.encodeTxId (Ledger.txIdTxBody @DijkstraEra dtBody)
             <> "spends"
             .= Alonzo.encodeIsValid dtIsPhase2Valid
+            <> encodeTxBody (fmt, opts) dtBody (strictMaybe mempty (Map.keys . snd) auxiliary)
+            <> "metadata"
+            .=? OmitWhenNothing fst auxiliary
+            <> Alonzo.encodeWitnessSet (encodeScript opts) (snd <$> auxiliary) encodeScriptPurposeIndex dtWits
             <> if includeTransactionCbor opts
                 then
                     "cbor" .= encodeByteStringBase16 (encodeCbor @DijkstraEra tx)
                 else
                     mempty
         )
+  where
+    auxiliary =
+        encodeAuxiliaryData (fmt, opts) (dtBody ^. Ledger.auxDataHashTxBodyL) dtAuxData
+
+encodeSubTx ::
+    (MetadataFormat, IncludeCbor) ->
+    Di.DijkstraTx Ledger.SubTx DijkstraEra ->
+    Json
+encodeSubTx (fmt, opts) tx@Di.DijkstraSubTx{Di.dstBody, Di.dstWits, Di.dstAuxData} =
+    encodeObject
+        ( Shelley.encodeTxId (Ledger.txIdTxBody @DijkstraEra dstBody)
+            <> encodeSharedTxBody opts dstBody (strictMaybe mempty (Map.keys . snd) auxiliary)
+            <> "metadata"
+            .=? OmitWhenNothing fst auxiliary
+            <> Alonzo.encodeWitnessSet (encodeScript opts) (snd <$> auxiliary) encodeScriptPurposeIndex dstWits
+            <> if includeTransactionCbor opts
+                then
+                    "cbor" .= encodeByteStringBase16 (encodeCbor @DijkstraEra tx)
+                else
+                    mempty
+        )
+  where
+    auxiliary =
+        encodeAuxiliaryData (fmt, opts) (dstBody ^. Ledger.auxDataHashTxBodyL) dstAuxData
+
+encodeAuxiliaryData ::
+    (MetadataFormat, IncludeCbor) ->
+    StrictMaybe Ledger.TxAuxDataHash ->
+    StrictMaybe (Ledger.TxAuxData DijkstraEra) ->
+    StrictMaybe (Json, Alonzo.AuxiliaryScripts DijkstraEra)
+encodeAuxiliaryData (fmt, opts) auxDataHash auxData = do
+    hash <- Shelley.encodeAuxiliaryDataHash <$> auxDataHash
+    (labels, scripts) <- Alonzo.encodeAuxiliaryData (fmt, opts) <$> auxData
+    pure
+        ( encodeObject ("hash" .= hash <> "labels" .= labels)
+        , scripts
+        )
+
+-- | Body of a top-level transaction: the fields shared with sub-transactions,
+-- followed by those that only top-level transactions have.
+encodeTxBody ::
+    (MetadataFormat, IncludeCbor) ->
+    Ledger.TxBody Ledger.TopTx DijkstraEra ->
+    [Ledger.ScriptHash] ->
+    Series
+encodeTxBody (fmt, opts) x scripts =
+    encodeSharedTxBody opts x scripts
+        <> "collaterals"
+        .=? OmitWhen
+            null
+            (encodeFoldable (encodeObject . Shelley.encodeTxIn))
+            (x ^. Ledger.collateralInputsTxBodyL)
+        <> "collateralReturn"
+        .=? OmitWhenNothing
+            (encodeObject . encodeTxOut opts)
+            (x ^. Ledger.collateralReturnTxBodyL)
+        <> "totalCollateral"
+        .=? OmitWhenNothing
+            encodeCoin
+            (x ^. Ledger.totalCollateralTxBodyL)
+        <> "fee"
+        .= encodeCoin (x ^. Ledger.feeTxBodyL)
+        <> "startingAccountBalanceIntervals"
+        .=? OmitWhen
+            (null . Di.unAccountBalanceIntervals)
+            encodeAccountBalanceIntervals
+            (x ^. Di.startingAccountBalanceIntervalsTxBodyL)
+        <> "subTransactions"
+        .=? OmitWhen
+            null
+            (encodeFoldable (encodeSubTx (fmt, opts) . Di.unDijkstraTx))
+            (x ^. Di.subTransactionsTxBodyL)
+
+-- | Fields found in both top-level transactions and sub-transactions.
+encodeSharedTxBody ::
+    IncludeCbor ->
+    Ledger.TxBody l DijkstraEra ->
+    [Ledger.ScriptHash] ->
+    Series
+encodeSharedTxBody opts x scripts =
+    "inputs"
+        .= encodeFoldable (encodeObject . Shelley.encodeTxIn) (x ^. Ledger.inputsTxBodyL)
+        <> "references"
+        .=? OmitWhen
+            null
+            (encodeFoldable (encodeObject . Shelley.encodeTxIn))
+            (x ^. Ledger.referenceInputsTxBodyL)
+        <> "outputs"
+        .= encodeFoldable (encodeObject . encodeTxOut opts) (x ^. Ledger.outputsTxBodyL)
+        <> "certificates"
+        .=? OmitWhen
+            null
+            (encodeConcatNonEmptyFoldable (fmap encodeObject . encodeTxCert))
+            (x ^. Ledger.certsTxBodyL)
+        <> "withdrawals"
+        .=? OmitWhen
+            (null . Ledger.unWithdrawals)
+            Shelley.encodeWdrl
+            (x ^. Ledger.withdrawalsTxBodyL)
+        <> "credits"
+        .=? OmitWhen
+            (null . unDirectDeposits)
+            (encodeMap Shelley.stringifyRewardAcnt encodeCoin . unDirectDeposits)
+            (x ^. Di.directDepositsTxBodyL)
+        <> "mint"
+        .=? OmitWhen
+            (== mempty)
+            (encodeObject . Mary.encodeMultiAsset)
+            (x ^. Ledger.mintTxBodyL)
+        <> "requiredExtraSignatories"
+        .=? OmitWhen
+            null
+            (encodeFoldable Shelley.encodeKeyHash)
+            guardKeyHashes
+        <> "requiredExtraScripts"
+        .=? OmitWhen
+            null
+            (encodeFoldable Shelley.encodeScriptHash)
+            scripts
+        <> "guards"
+        .=? OmitWhen
+            null
+            (encodeFoldable Shelley.encodeScriptHash)
+            guardScriptHashes
+        <> "topLevelGuards"
+        .=? OmitWhen
+            null
+            (encodeMapAsList encodeTopLevelGuard)
+            (x ^. Di.requiredTopLevelGuardsL)
+        <> "network"
+        .=? OmitWhenNothing
+            Shelley.encodeNetwork
+            (x ^. Ledger.networkIdTxBodyL)
+        <> "scriptIntegrityHash"
+        .=? OmitWhenNothing
+            Alonzo.encodeScriptIntegrityHash
+            (x ^. Ledger.scriptIntegrityHashTxBodyL)
+        <> "validityInterval"
+        .= Allegra.encodeValidityInterval (x ^. Ledger.vldtTxBodyL)
+        <> "proposals"
+        .=? OmitWhen
+            null
+            (encodeFoldable (encodeObject . encodeProposalProcedure))
+            (x ^. Ledger.proposalProceduresTxBodyL)
+        <> "votes"
+        .=? OmitWhen
+            (null . Cn.unVotingProcedures)
+            Conway.encodeVotingProcedures
+            (x ^. Ledger.votingProceduresTxBodyL)
+        <> "treasury"
+        .=? OmitWhen
+            (\_ -> isSNothing treasuryValue && treasuryDonation == mempty)
+            identity
+            ( encodeObject
+                ( "value"
+                    .=? OmitWhenNothing encodeCoin treasuryValue
+                    <> "donation"
+                    .=? OmitWhen (== mempty) encodeCoin treasuryDonation
+                )
+            )
+        <> "accountBalanceIntervals"
+        .=? OmitWhen
+            (null . Di.unAccountBalanceIntervals)
+            encodeAccountBalanceIntervals
+            (x ^. Di.accountBalanceIntervalsTxBodyL)
+  where
+    guards =
+        x ^. Di.guardsTxBodyL
+
+    guardKeyHashes =
+        foldr
+            ( \case
+                Ledger.KeyHashObj h -> Set.insert h
+                Ledger.ScriptHashObj _ -> identity
+            )
+            mempty
+            guards
+
+    guardScriptHashes =
+        foldr
+            ( \case
+                Ledger.KeyHashObj _ -> identity
+                Ledger.ScriptHashObj h -> Set.insert h
+            )
+            mempty
+            guards
+
+    treasuryValue =
+        x ^. Ledger.currentTreasuryValueTxBodyL
+
+    treasuryDonation =
+        x ^. Ledger.treasuryDonationTxBodyL
+
+    encodeTopLevelGuard credential datum =
+        encodeObject
+            ( "credential"
+                `Shelley.encodeCredential` credential
+                <> "datum"
+                .=? OmitWhenNothing (Alonzo.encodeData @DijkstraEra) datum
+            )
+
+encodeAccountBalanceIntervals ::
+    Di.AccountBalanceIntervals DijkstraEra ->
+    Json
+encodeAccountBalanceIntervals =
+    encodeMapAsList encodeEntry . Di.unAccountBalanceIntervals
+  where
+    encodeEntry (AccountAddress _network (AccountId credential)) interval =
+        encodeObject
+            ( "credential"
+                `Shelley.encodeCredential` credential
+                <> case interval of
+                    Di.AccountBalanceLowerBound (Inclusive lo) ->
+                        "atLeast" .= encodeCoin lo
+                    Di.AccountBalanceUpperBound (Exclusive hi) ->
+                        "atMost" .= encodeCoin hi
+                    Di.AccountBalanceBothBounds (Inclusive lo) (Exclusive hi) ->
+                        "atLeast"
+                            .= encodeCoin lo
+                            <> "atMost"
+                            .= encodeCoin hi
+                    Di.AccountBalanceExact coin ->
+                        "exactly" .= encodeCoin coin
+            )
 
 encodeNativeScript ::
     forall era.
@@ -566,6 +802,19 @@ encodePParamsHKD encode pure_ x =
             (encodeSingleton "bytes" . encodeWord32)
             (unTHKD (Di.dppMaxRefScriptSizePerTx x))
         & encodeObject
+
+encodeProposalProcedure ::
+    Cn.ProposalProcedure DijkstraEra ->
+    Series
+encodeProposalProcedure x =
+    "deposit"
+        .= encodeCoin (Cn.pProcDeposit x)
+        <> "returnAccount"
+        .= Shelley.encodeRewardAcnt (Cn.pProcReturnAddr x)
+        <> "metadata"
+        .= Conway.encodeAnchor (Cn.pProcAnchor x)
+        <> "action"
+        .= encodeGovAction (Cn.pProcGovAction x)
 
 encodeGovAction ::
     forall era.
