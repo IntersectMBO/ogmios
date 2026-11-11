@@ -1074,7 +1074,7 @@ instance Arbitrary (NextBlockResponse Block) where
     shrink = genericShrink
     arbitrary =
         frequency
-            [ (10, RollForward <$> reasonablySized arbitrary <*> genTipNoGenesis)
+            [ (10, RollForward <$> reasonablySized genBlock <*> genTipNoGenesis)
             , (1, RollBackward <$> arbitrary <*> arbitrary)
             ]
 
