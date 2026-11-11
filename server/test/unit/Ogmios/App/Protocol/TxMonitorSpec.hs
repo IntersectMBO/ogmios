@@ -119,7 +119,7 @@ import Test.Generators
     ( genMempoolMeasures
     , genMempoolSizeAndCapacity
     , genMirror
-    , genTx
+    , genTxForCodec
     , genTxId
     , generateWith
     , reasonablySized
@@ -383,7 +383,7 @@ maxCapacity :: Int
 maxCapacity = 10
 
 plausibleTxs :: [GenTx Block]
-plausibleTxs = generateWith (vectorOf (2 * maxCapacity) genTx) 42
+plausibleTxs = generateWith (vectorOf (2 * maxCapacity) genTxForCodec) 42
 
 plausibleTxsIds :: [Ledger.TxId]
 plausibleTxsIds = unGenTxId . txId <$> plausibleTxs
