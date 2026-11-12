@@ -24,6 +24,12 @@ Fork pull requests build and lint the TypeScript client without repository secre
 
 The fork job conditions route checks; GitHub's restrictions on fork tokens and secrets provide the security boundary. Keep those restrictions enabled in repository settings. Container publication requires a successful Continuous Integration run for the exact tagged commit from a push to `master` or a manual run on `master`; a PR check cannot satisfy it. Actions caching is disabled in these workflows; S3 database snapshots and the Nix binary cache remain available.
 
+Integration tests restore the preview database from S3 but do not upload it. Network Synchronization is the sole cache writer, with scheduled and manual runs serialized across refs. Restore fetches immutable data, the two newest ledger snapshots, and volatile data. After a successful restore and clean node shutdown, the writer uploads retained snapshots before pruning obsolete snapshots and mirrors volatile files so they stop accumulating. Partial synchronization progress can still be saved; an unclean shutdown cannot replace the cache.
+
+The first successful writer run prunes the legacy ledger accumulation. Legacy volatile data is still restored in full until that run mirrors the node's current files. The shared S3 prefix is not an atomic snapshot; readers can overlap an upload, and restores retry transfer failures. Avoid running older workflows that still upload the entire database alongside the updated writer. If S3 versioning is enabled, deleting current objects does not reclaim their noncurrent versions; bucket lifecycle rules control that storage.
+
+Run the local cache regression tests with `python3 .github/workflows/scripts/test-preview-cache.py` (requires Bash and jq). They use fixture data and fake S3 commands, without AWS access or a running container.
+
 #### 3. Donation
 
 Want to give some financial support? Have a look at the [sponsors page](https://github.com/sponsors/KtorZ/) for more details.

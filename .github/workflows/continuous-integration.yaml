@@ -151,34 +151,14 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
+    # Read-only: Network Synchronization is the only writer of this cache, so
+    # concurrent pull request runs cannot delete each other's objects.
     - name: Restore cardano-node DB from S3
-      shell: bash {0}
       env:
         RUNNER_TEMP: ${{ runner.temp }}
       run: |
-        mkdir -p "$RUNNER_TEMP/db-preview"
-        for attempt in 1 2 3; do
-          echo "S3 sync attempt $attempt..."
-          nix shell nixpkgs#s5cmd -c \
-            s5cmd --log error sync "$S3_DB_PATH/*" "$RUNNER_TEMP/db-preview/" > /tmp/s3-sync.log 2>&1 &
-          pid=$!
-          while kill -0 "$pid" 2>/dev/null; do
-            du -sh "$RUNNER_TEMP/db-preview" 2>/dev/null
-            sleep 15
-          done
-          wait "$pid"
-          rc=$?
-          echo "S3 sync attempt $attempt finished (exit $rc). Last 30 lines of log:"
-          tail -30 /tmp/s3-sync.log
-          if [ "$rc" -eq 0 ]; then
-            echo "S3 sync succeeded"
-            break
-          fi
-          if [ "$attempt" -eq 3 ]; then
-            exit 1
-          fi
-          echo "Retrying..."
-        done
+        nix shell nixpkgs#s5cmd -c \
+          ./.github/workflows/scripts/preview-db-restore.sh "$S3_DB_PATH" "$RUNNER_TEMP/db-preview"
 
     - name: Setup Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -213,16 +193,10 @@ jobs:
       working-directory: clients/TypeScript
       run: yarn test
 
+    # A node under load takes well over the 10s default to flush and write its
+    # clean-shutdown marker; without it the next start revalidates everything.
     - name: Stop cardano-node
       if: always() && steps.sync.outcome != 'skipped'
       run: |
-        docker stop cardano-node || true
+        docker stop -t 300 cardano-node || true
         docker rm cardano-node || true
-
-    - name: Save cardano-node DB to S3
-      if: always() && steps.sync.outcome == 'success'
-      env:
-        RUNNER_TEMP: ${{ runner.temp }}
-      run: |
-        nix shell nixpkgs#s5cmd -c \
-          s5cmd --log error sync "$RUNNER_TEMP/db-preview/" "$S3_DB_PATH/"

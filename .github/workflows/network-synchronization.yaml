@@ -26,8 +26,17 @@ env:
 
 jobs:
   sync_and_cache:
+    # One writer across scheduled/manual runs and all selected refs.
+    concurrency:
+      group: preview-db-cache-writer
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        persist-credentials: false
+
     - name: Download cardano-node configs
       env:
         BASE_URL: https://raw.githubusercontent.com/input-output-hk/cardano-playground/refs/tags/${{ env.CARDANO_CONFIG_TAG }}/docs/environments/preview
@@ -54,33 +63,12 @@ jobs:
           substituters = https://cache.iog.io/ https://cache.nixos.org/
 
     - name: Restore cardano-node DB from S3
-      shell: bash {0}
+      id: restore
       env:
         RUNNER_TEMP: ${{ runner.temp }}
       run: |
-        mkdir -p "$RUNNER_TEMP/db-preview"
-        for attempt in 1 2 3; do
-          echo "S3 sync attempt $attempt..."
-          nix shell nixpkgs#s5cmd -c \
-            s5cmd --log error sync "$S3_DB_PATH/*" "$RUNNER_TEMP/db-preview/" > /tmp/s3-sync.log 2>&1 &
-          pid=$!
-          while kill -0 "$pid" 2>/dev/null; do
-            du -sh "$RUNNER_TEMP/db-preview" 2>/dev/null
-            sleep 15
-          done
-          wait "$pid"
-          rc=$?
-          echo "S3 sync attempt $attempt finished (exit $rc). Last 30 lines of log:"
-          tail -30 /tmp/s3-sync.log
-          if [ "$rc" -eq 0 ]; then
-            echo "S3 sync succeeded"
-            break
-          fi
-          if [ "$attempt" -eq 3 ]; then
-            exit 1
-          fi
-          echo "Retrying..."
-        done
+        nix shell nixpkgs#s5cmd -c \
+          ./.github/workflows/scripts/preview-db-restore.sh "$S3_DB_PATH" "$RUNNER_TEMP/db-preview"
 
     - name: Sync node
       id: sync
@@ -113,16 +101,21 @@ jobs:
           sleep 30
         done
 
+    # A node under load takes well over the 10s default to flush and write its
+    # clean-shutdown marker; without it the next start revalidates everything.
     - name: Stop cardano-node
+      id: stop
       if: always() && steps.sync.outcome != 'skipped'
       run: |
-        docker stop cardano-node || true
-        docker rm cardano-node || true
+        docker stop -t 300 cardano-node
+        docker rm cardano-node
 
+    # Save partial sync progress only after a successful restore and shutdown.
+    # The save script also requires the node's clean-shutdown marker.
     - name: Save cardano-node DB to S3
-      if: always() && steps.sync.outcome != 'skipped'
+      if: always() && steps.restore.outcome == 'success' && steps.sync.outcome != 'skipped' && steps.stop.outcome == 'success'
       env:
         RUNNER_TEMP: ${{ runner.temp }}
       run: |
         nix shell nixpkgs#s5cmd -c \
-          s5cmd --log error sync "$RUNNER_TEMP/db-preview/" "$S3_DB_PATH/"
+          ./.github/workflows/scripts/preview-db-save.sh "$S3_DB_PATH" "$RUNNER_TEMP/db-preview"
