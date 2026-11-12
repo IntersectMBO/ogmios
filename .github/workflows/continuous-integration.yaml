@@ -10,15 +10,41 @@ on:
     branches:
     - master
 
+permissions:
+  contents: read
+
+cache-mode: none
+
 env:
   CARDANO_NODE_VERSION: "11.1.1"
   # cardano-playground has no node-11.1.1-config tag yet, so configs stay
   # pinned to the newest tagged set.
   CARDANO_CONFIG_TAG: "node-11.0.1-config"
   NETWORK: preview
-  S3_DB_PATH: s3://${{ secrets.AWS_S3_BUCKET }}/db-preview
 
 jobs:
+  fork-checks:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: true
+        persist-credentials: false
+
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: lts/jod
+
+    - name: Build and lint TypeScript client
+      working-directory: clients/TypeScript
+      run: |
+        yarn install --frozen-lockfile --non-interactive --loglevel=error
+        yarn build
+        yarn lint
+
   # TODO: switch back to this once Hydra reports check-runs to GitHub
   # wait-for-hydra:
   #   runs-on: ubuntu-latest
@@ -39,6 +65,11 @@ jobs:
   #       done
 
   clients_TypeScript:
+    # Repository writers are trusted to run integration tests with AWS access.
+    # This routes fork jobs; GitHub's fork secret/token restrictions enforce isolation.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      S3_DB_PATH: s3://${{ secrets.AWS_S3_BUCKET }}/db-preview
     # needs:
     # - wait-for-hydra
     runs-on: ubuntu-24.04
@@ -157,7 +188,7 @@ jobs:
     - name: Build TypeScript client
       working-directory: clients/TypeScript
       run: |
-        yarn install --frozen-lockfile --non-interactive --logevel=error
+        yarn install --frozen-lockfile --non-interactive --loglevel=error
         yarn build
         yarn lint
 

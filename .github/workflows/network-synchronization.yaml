@@ -12,6 +12,11 @@ on:
         default: 1
         type: number
 
+permissions:
+  contents: read
+
+cache-mode: none
+
 env:
   CARDANO_NODE_VERSION: "11.1.1"
   # cardano-playground has no node-11.1.1-config tag yet, so configs stay

@@ -18,6 +18,12 @@ Do not hesitate to upvote discussions or comments to show your interest!
 
  Pull requests are welcome, but we do recommend to open an issue to bring any idea to discussion first!
 
+##### GitHub Actions checks
+
+Fork pull requests build and lint the TypeScript client without repository secrets. Same-repository pull requests, pushes to `master`, and manual Continuous Integration runs also run the AWS-backed integration tests. Manual runs retain the branch/ref selector; select a trusted repository revision because those runs have AWS access. Repository writers are trusted with that access.
+
+The fork job conditions route checks; GitHub's restrictions on fork tokens and secrets provide the security boundary. Keep those restrictions enabled in repository settings. Container publication requires a successful Continuous Integration run for the exact tagged commit from a push to `master` or a manual run on `master`; a PR check cannot satisfy it. Actions caching is disabled in these workflows; S3 database snapshots and the Nix binary cache remain available.
+
 #### 3. Donation
 
 Want to give some financial support? Have a look at the [sponsors page](https://github.com/sponsors/KtorZ/) for more details.
