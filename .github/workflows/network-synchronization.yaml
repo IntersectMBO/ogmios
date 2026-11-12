@@ -72,34 +72,14 @@ jobs:
 
     - name: Sync node
       id: sync
+      timeout-minutes: 300
       env:
         CONFDIR: ${{ github.workspace }}/config/preview
         RUNNER_TEMP: ${{ runner.temp }}
-        SYNC_LEVEL: ${{ inputs.synchronization-level || 1 }}
+        # Stringify without JSON quotes; the nonempty string '0' preserves zero.
+        SYNC_LEVEL: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.synchronization-level) || '1' }}
       run: |
-        docker run -d --name cardano-node \
-          -v "$RUNNER_TEMP/db-preview:/db" \
-          -v "$RUNNER_TEMP/ipc:/ipc" \
-          -v "$CONFDIR:/config" \
-          "ghcr.io/intersectmbo/cardano-node:$CARDANO_NODE_VERSION" run --config /config/config.json --database-path /db --socket-path /ipc/node.socket --topology /config/topology.json
-
-        echo "Waiting for node socket..."
-        while [ ! -S "$RUNNER_TEMP/ipc/node.socket" ]; do
-          sleep 5
-        done
-
-        echo "Waiting for sync to reach $SYNC_LEVEL..."
-        while true; do
-          tip=$(docker exec cardano-node cardano-cli query tip --testnet-magic 2 2>/dev/null) || { sleep 5; continue; }
-          sync=$(echo "$tip" | jq -r '.syncProgress // "0"' | tr -d '%')
-          pct=$(echo "scale=4; $sync / 100" | bc)
-          echo "Sync progress: ${sync}%"
-          if [ "$(echo "$pct >= $SYNC_LEVEL" | bc)" -eq 1 ]; then
-            echo "Reached target sync level"
-            break
-          fi
-          sleep 30
-        done
+        ./.github/workflows/scripts/preview-node-sync.sh "$SYNC_LEVEL"
 
     # A node under load takes well over the 10s default to flush and write its
     # clean-shutdown marker; without it the next start revalidates everything.

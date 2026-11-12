@@ -28,7 +28,7 @@ Integration tests restore the preview database from S3 but do not upload it. Net
 
 The first successful writer run prunes the legacy ledger accumulation. Legacy volatile data is still restored in full until that run mirrors the node's current files. The shared S3 prefix is not an atomic snapshot; readers can overlap an upload, and restores retry transfer failures. Avoid running older workflows that still upload the entire database alongside the updated writer. If S3 versioning is enabled, deleting current objects does not reclaim their noncurrent versions; bucket lifecycle rules control that storage.
 
-Run the local cache regression tests with `python3 .github/workflows/scripts/test-preview-cache.py` (requires Bash and jq). They use fixture data and fake S3 commands, without AWS access or a running container.
+Run the local cache and sync-loop regression tests with `python3 .github/workflows/scripts/test-preview-cache.py` (requires Bash and jq). They use fixture data and fake S3/Docker commands, without AWS access or a running container.
 
 #### 3. Donation
 
