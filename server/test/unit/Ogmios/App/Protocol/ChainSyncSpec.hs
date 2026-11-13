@@ -96,7 +96,7 @@ import Test.App.Protocol.Util
     , withMockChannel
     )
 import Test.Generators
-    ( genBlock
+    ( genBlockForCodec
     , genMirror
     , genPoint
     , genTip
@@ -256,7 +256,7 @@ chainSyncMockPeer seed Codec{ encode, decode } (recv, send) = flip evalStateT se
     genNextBlockResponse
         :: Gen (ChainSync.Message Protocol ('StNext 'StMustReply) 'StIdle)
     genNextBlockResponse = reasonablySized $ frequency
-        [ (10, ChainSync.MsgRollForward <$> genBlock <*> genTip)
+        [ (10, ChainSync.MsgRollForward <$> genBlockForCodec <*> genTip)
         , ( 1, ChainSync.MsgRollBackward <$> genPoint <*> genTip)
         ]
 

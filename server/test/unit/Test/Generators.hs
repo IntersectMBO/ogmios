@@ -201,6 +201,7 @@ import qualified Cardano.Ledger.Block as Ledger
 import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.DRep as Ledger
 import qualified Cardano.Ledger.Dijkstra.Rules as Di
+import qualified Cardano.Ledger.Dijkstra.TxBody as Di
 import qualified Cardano.Ledger.State as Ledger
 
 import qualified Cardano.Ledger.Api.State.Query as Ledger
@@ -220,6 +221,7 @@ genBlock = oneof
     , BlockAlonzo <$> genTPraosBlockFrom @AlonzoEra
     , BlockBabbage <$> genPraosBlockFrom @BabbageEra
     , BlockConway <$> genPraosBlockFrom @ConwayEra
+    , BlockDijkstra <$> genPraosBlockFrom @DijkstraEra
     ]
   where
     genTPraosBlockFrom
@@ -282,7 +284,8 @@ genTxId = arbitrary
 
 genGenTxId :: Gen (GenTxId Block)
 genGenTxId = oneof
-    [ GenTxIdConway . ShelleyTxId <$> genTxId
+    [ GenTxIdDijkstra . ShelleyTxId <$> genTxId
+    , GenTxIdConway . ShelleyTxId <$> genTxId
     , GenTxIdBabbage . ShelleyTxId <$> genTxId
     , GenTxIdAlonzo . ShelleyTxId <$> genTxId
     ]
@@ -292,7 +295,56 @@ genTx = oneof
     [ GenTxAlonzo <$> liftA2 ShelleyTx arbitrary arbitrary
     , GenTxBabbage <$> liftA2 ShelleyTx arbitrary arbitrary
     , GenTxConway <$> liftA2 ShelleyTx arbitrary arbitrary
+    , GenTxDijkstra <$> liftA2 ShelleyTx arbitrary arbitrary
     ]
+
+-- | Like 'genBlock', but only blocks which the node-to-client codec can decode.
+--
+-- The ledger decodes the datums of top-level guards in Dijkstra transaction
+-- bodies with a decoder that needs the original bytes, which the consensus
+-- block and transaction decoders do not provide. Such transactions are
+-- therefore left out of specs going through the codec.
+genBlockForCodec :: Gen Block
+genBlockForCodec =
+    genBlock `suchThat` (not . hasGuardDatums)
+  where
+    hasGuardDatums = \case
+        BlockByron{} -> False
+        BlockShelley{} -> False
+        BlockAllegra{} -> False
+        BlockMary{} -> False
+        BlockAlonzo{} -> False
+        BlockBabbage{} -> False
+        BlockConway{} -> False
+        BlockDijkstra (ShelleyBlock (Ledger.Block _ body) _) ->
+            any txHasGuardDatums (body ^. txSeqBlockBodyL)
+
+-- | Like 'genTx', but only transactions which the node-to-client codec can
+-- decode. See 'genBlockForCodec'.
+genTxForCodec :: Gen (GenTx Block)
+genTxForCodec =
+    genTx `suchThat` (not . hasGuardDatums)
+  where
+    hasGuardDatums = \case
+        GenTxByron{} -> False
+        GenTxShelley{} -> False
+        GenTxAllegra{} -> False
+        GenTxMary{} -> False
+        GenTxAlonzo{} -> False
+        GenTxBabbage{} -> False
+        GenTxConway{} -> False
+        GenTxDijkstra (ShelleyTx _ tx) ->
+            txHasGuardDatums tx
+
+txHasGuardDatums :: Ledger.Tx Ledger.TopTx DijkstraEra -> Bool
+txHasGuardDatums tx =
+    bodyHasGuardDatums body
+        || any (bodyHasGuardDatums . (^. Ledger.bodyTxL)) (body ^. Di.subTransactionsTxBodyL)
+  where
+    body = tx ^. Ledger.bodyTxL
+
+    bodyHasGuardDatums :: Ledger.TxBody l DijkstraEra -> Bool
+    bodyHasGuardDatums = any isSJust . (^. Di.requiredTopLevelGuardsL)
 
 genMempoolSizeAndCapacity :: Gen MempoolSizeAndCapacity
 genMempoolSizeAndCapacity = MempoolSizeAndCapacity
