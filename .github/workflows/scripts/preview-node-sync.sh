@@ -6,6 +6,7 @@
 
 # Run the preview node and query its progress until the requested fraction is met.
 # CONFDIR, RUNNER_TEMP and CARDANO_NODE_VERSION are provided by the workflow.
+# Leave room for cleanup before the workflow step's 300-minute timeout.
 set -euo pipefail
 SYNC_LEVEL="${1:-1}"
 if ! jq -en --arg level "$SYNC_LEVEL" '$level | tonumber | . >= 0 and . <= 1' >/dev/null; then
@@ -13,11 +14,26 @@ if ! jq -en --arg level "$SYNC_LEVEL" '$level | tonumber | . >= 0 and . <= 1' >/
   exit 1
 fi
 
+SYNC_TIMEOUT_SECONDS="${SYNC_TIMEOUT_SECONDS:-17400}"
+if [[ ! "$SYNC_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "::error::SYNC_TIMEOUT_SECONDS must be a positive integer." >&2
+  exit 1
+fi
+sync_deadline=$((SECONDS + SYNC_TIMEOUT_SECONDS))
+
 docker run -d --name cardano-node \
   -v "$RUNNER_TEMP/db-preview:/db" \
   -v "$RUNNER_TEMP/ipc:/ipc" \
   -v "$CONFDIR:/config" \
   "ghcr.io/intersectmbo/cardano-node:$CARDANO_NODE_VERSION" run --config /config/config.json --database-path /db --socket-path /ipc/node.socket --topology /config/topology.json
+
+check_deadline() {
+  if [ "$SECONDS" -ge "$sync_deadline" ]; then
+    echo "::error::Timed out waiting for node to sync." >&2
+    docker logs --tail 100 cardano-node >&2 || true
+    exit 1
+  fi
+}
 
 check_running() {
   if [ "$(docker inspect --format '{{.State.Running}}' cardano-node)" != true ]; then
@@ -31,6 +47,7 @@ echo "Waiting for node socket..."
 deadline=$((SECONDS + 900))
 while [ ! -S "$RUNNER_TEMP/ipc/node.socket" ]; do
   check_running
+  check_deadline
   if [ "$SECONDS" -ge "$deadline" ]; then
     echo "::error::Timed out waiting for node socket." >&2
     docker logs --tail 100 cardano-node >&2 || true
@@ -43,6 +60,7 @@ echo "Waiting for sync to reach $SYNC_LEVEL..."
 query_failures=0
 while true; do
   check_running
+  check_deadline
   # docker exec bypasses the image's CLI wrapper, so supply the socket explicitly.
   if ! tip=$(docker exec cardano-node cardano-cli query tip --testnet-magic 2 --socket-path /ipc/node.socket); then
     query_failures=$((query_failures + 1))
@@ -55,7 +73,13 @@ while true; do
     continue
   fi
   query_failures=0
-  progress=$(jq -er '.syncProgress | tonumber | select(. >= 0 and . <= 100)' <<< "$tip")
+  # A successful query can omit progress while the node is initializing.
+  # Missing progress is not zero, even when the requested target is zero.
+  if ! progress=$(jq -er '.syncProgress // empty | tonumber | select(. >= 0 and . <= 100)' <<< "$tip"); then
+    echo "Waiting for node to report sync progress..." >&2
+    sleep 5
+    continue
+  fi
   echo "Sync progress: ${progress}%"
   if jq -en --argjson progress "$progress" --argjson level "$SYNC_LEVEL" \
       '$progress >= ($level * 100)' >/dev/null; then
