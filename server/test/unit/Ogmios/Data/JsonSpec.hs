@@ -199,6 +199,9 @@ import Ouroboros.Consensus.Cardano.Block (
     GenTx (..),
     HardForkApplyTxErr (..),
  )
+import Ouroboros.Consensus.Ledger.SupportsMempool (
+    txId,
+ )
 import Ouroboros.Consensus.Shelley.Ledger.Mempool (
     GenTx (..),
  )
@@ -588,6 +591,16 @@ spec = do
 
     context "validate transaction submission request/response against JSON-schema" $ do
         prop "deserialise signed transactions" prop_parseSubmitTransaction
+        specify "deserialise a Dijkstra transaction with sub-transactions" $ do
+            hex <- readFileBS ($(getProjectRoot) <> "/test/golden/Transaction_Dijkstra_1.cbor.hex")
+            expected <- decodeFileThrow "Transaction_Dijkstra_1.json"
+            let json = Json.object ["cbor" .= T.strip (decodeUtf8 hex)]
+            case Json.parseEither (parseJSON @(MultiEraDecoder (GenTx Block))) json of
+                Right (MultiEraDecoderSuccess tx@GenTxDijkstra{}) ->
+                    inefficientEncodingToValue (encodeGenTxId (txId tx))
+                        `shouldBe` Json.Object (Json.filterWithKey (\k _ -> k == "id") expected)
+                result ->
+                    expectationFailure (show result)
         validateToJSON
             (arbitrary @(Rpc.Response (SubmitTransactionResponse Block)))
             ( _encodeSubmitTransactionResponse
