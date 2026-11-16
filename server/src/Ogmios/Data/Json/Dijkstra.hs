@@ -253,8 +253,8 @@ encodeSharedTxBody opts x scripts =
         <> "guards"
         .=? OmitWhen
             null
-            (encodeFoldable Shelley.encodeScriptHash)
-            guardScriptHashes
+            (encodeFoldable encodeGuard)
+            guards
         <> "topLevelGuards"
         .=? OmitWhen
             null
@@ -309,20 +309,16 @@ encodeSharedTxBody opts x scripts =
             mempty
             guards
 
-    guardScriptHashes =
-        foldr
-            ( \case
-                Ledger.KeyHashObj _ -> identity
-                Ledger.ScriptHashObj h -> Set.insert h
-            )
-            mempty
-            guards
-
     treasuryValue =
         x ^. Ledger.currentTreasuryValueTxBodyL
 
     treasuryDonation =
         x ^. Ledger.treasuryDonationTxBodyL
+
+    -- Guards are listed in the ledger's order, so the index of a guard
+    -- redeemer points into the list.
+    encodeGuard credential =
+        encodeObject ("credential" `Shelley.encodeCredential` credential)
 
     encodeTopLevelGuard credential datum =
         encodeObject

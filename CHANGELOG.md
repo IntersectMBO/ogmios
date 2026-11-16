@@ -48,7 +48,7 @@ math: true
 
 - In the Dijkstra era, `nextBlock` and `nextTransaction` now return transactions with all their content, with the same fields as in the Conway era: inputs, outputs, certificates, withdrawals, mint, fee, votes, proposals, metadata, signatories, scripts, datums, redeemers, and so on. Before, a Dijkstra transaction only had `id`, `spends` and, when asked for, `cbor`. Dijkstra transactions also have new fields:
   - `subTransactions`: the transactions nested in this one. Each has its own `id` and the same fields as a transaction, except `spends`, `fee`, `collaterals`, `collateralReturn`, `totalCollateral`, `startingAccountBalanceIntervals` and `subTransactions`.
-  - `guards`: the hashes of the scripts that guard the transaction. Guards that are keys are listed in `requiredExtraSignatories`.
+  - `guards`: the keys and scripts that guard the transaction, each with `from` and `credential`, in the ledger's order. The index of a redeemer with purpose `guard` points into this list. Keys are also listed in `requiredExtraSignatories`.
   - `topLevelGuards`: the guards that the top-level transaction must list, each with `from`, `credential` and, for Plutus scripts, a `datum`.
   - `credits`: amounts paid directly into accounts, with the same shape as `withdrawals`.
   - `accountBalanceIntervals`: conditions on account balances, each with `from`, `credential` and either `atLeast`, `atMost`, both, or `exactly`.

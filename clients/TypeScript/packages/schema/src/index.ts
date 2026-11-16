@@ -624,9 +624,9 @@ export interface Transaction {
   requiredExtraSignatories?: DigestBlake2B224[];
   requiredExtraScripts?: DigestBlake2B224[];
   /**
-   * Hashes of scripts which must run and succeed for the transaction to be valid. From Dijkstra onwards.
+   * Keys and scripts which must approve the transaction, in the ledger's order. The index of a redeemer with purpose 'guard' points into this list. Keys are also listed in 'requiredExtraSignatories'. From Dijkstra onwards.
    */
-  guards?: DigestBlake2B224[];
+  guards?: Guard[];
   /**
    * Guards (keys or scripts) that this transaction must list in its own guards. From Dijkstra onwards.
    */
@@ -908,7 +908,14 @@ export interface Assets {
   };
 }
 /**
- * A guard (key or script) that the top-level transaction must list among its own guards (under 'requiredExtraSignatories' for keys, 'guards' for scripts). Plutus script guards come with a datum.
+ * A key or a script which must approve a transaction.
+ */
+export interface Guard {
+  from: CredentialOrigin;
+  credential: DigestBlake2B224;
+}
+/**
+ * A guard (key or script) that the top-level transaction must list in its own 'guards'. Plutus script guards come with a datum.
  */
 export interface TopLevelGuard {
   from: CredentialOrigin;
@@ -1257,9 +1264,9 @@ export interface SubTransaction {
   requiredExtraSignatories?: DigestBlake2B224[];
   requiredExtraScripts?: DigestBlake2B224[];
   /**
-   * Hashes of scripts which must run and succeed for the sub-transaction to be valid.
+   * Keys and scripts which must approve the sub-transaction, in the ledger's order. The index of a redeemer with purpose 'guard' points into this list. Keys are also listed in 'requiredExtraSignatories'.
    */
-  guards?: DigestBlake2B224[];
+  guards?: Guard[];
   /**
    * Guards (keys or scripts) that the top-level transaction must list in its own guards.
    */
