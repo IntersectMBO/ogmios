@@ -17,6 +17,7 @@ import Cardano.Ledger.Api (
     AsItem,
     PlutusPurpose,
     TxCert,
+    eraProtVerLow,
  )
 import Cardano.Ledger.BaseTypes (
     Inject (..),
@@ -29,6 +30,9 @@ import Cardano.Ledger.Conway.TxInfo (
  )
 import Cardano.Ledger.Dijkstra (
     DijkstraEra,
+ )
+import Cardano.Ledger.Dijkstra.Tx (
+    unDijkstraTx,
  )
 import Cardano.Ledger.Dijkstra.TxInfo (
     DijkstraContextError,
@@ -93,6 +97,7 @@ import Ogmios.Data.Json.Prelude (
     MetadataFormat (..),
     encodeRelativeTime,
     encodeSlotLength,
+    includeAllCbor,
     omitOptionalCbor,
  )
 import Ogmios.Data.Json.Query (
@@ -468,6 +473,24 @@ spec = do
         specify "Golden: NextTransactionResponse_1" $ do
             json <- decodeFileThrow "NextTransactionResponse_1.json"
             refs <- unsafeReadSchemaRef "ogmios.json#/properties/NextTransactionResponse"
+            runQuickCheck $ withNumTests 1 $ prop_validateToJSON identity refs json
+
+        specify "Golden: Transaction_Dijkstra_1" $ do
+            -- A real transaction from a local testnet, made with cardano-cli.
+            hex <- readFileBS ($(getProjectRoot) <> "/test/golden/Transaction_Dijkstra_1.cbor.hex")
+            tx <-
+                either (fail . show) pure
+                    $ Binary.decodeFullAnnotator
+                        (eraProtVerLow @DijkstraEra)
+                        "Tx"
+                        Binary.decCBOR
+                        (toLazy $ unsafeDecodeBase16 $ T.strip $ decodeUtf8 hex)
+            let json =
+                    inefficientEncodingToValue
+                        $ Dijkstra.encodeTx (MetadataNoSchema, includeAllCbor) (unDijkstraTx tx)
+            expected <- decodeFileThrow "Transaction_Dijkstra_1.json"
+            json `shouldBe` expected
+            refs <- unsafeReadSchemaRef "cardano.json#/definitions/Transaction"
             runQuickCheck $ withNumTests 1 $ prop_validateToJSON identity refs json
 
         context "Data / BinaryData" $ do
