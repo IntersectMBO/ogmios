@@ -54,6 +54,8 @@ math: true
   - `accountBalanceIntervals`: conditions on account balances, each with the stake address of the `account` and either `atLeast`, `atMost`, both, or `exactly`.
   - `startingAccountBalanceIntervals` (top-level transactions only): the same conditions, checked against the balances before the transaction and its sub-transactions are applied.
 
+- `submitTransaction` and `evaluateTransaction` now read transactions that use fields new in the Dijkstra era, such as sub-transactions. Before, they refused them as malformed. When a transaction cannot be read in any era, the error `data` now has a `dijkstra` entry too.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added

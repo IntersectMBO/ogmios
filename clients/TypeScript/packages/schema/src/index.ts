@@ -2354,6 +2354,7 @@ export interface DeserialisationFailure {
     alonzo: string;
     babbage: string;
     conway: string;
+    dijkstra: string;
   };
 }
 /**

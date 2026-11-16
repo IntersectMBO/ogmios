@@ -2897,6 +2897,7 @@ decodeSerializedTransaction = Json.withText "Transaction" $ \(encodeUtf8 -> utf8
         <|> deserialiseCBOR @MaryEra GenTxMary bytes
         <|> deserialiseCBOR @AllegraEra GenTxAllegra bytes
         <|> deserialiseCBOR @ShelleyEra GenTxShelley bytes
+        <|> deserialiseCBOR @DijkstraEra GenTxDijkstra bytes
   where
     -- We use this extra constraint when decoding transactions to generate a
     -- compiler warning in case a new era becomes available, to not forget to update

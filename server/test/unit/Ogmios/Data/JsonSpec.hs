@@ -1150,6 +1150,7 @@ instance Arbitrary (SubmitTransactionResponse Block) where
                         , (SomeShelleyEra ShelleyBasedEraAlonzo, Binary.DecoderErrorVoid, 0)
                         , (SomeShelleyEra ShelleyBasedEraBabbage, Binary.DecoderErrorVoid, 0)
                         , (SomeShelleyEra ShelleyBasedEraConway, Binary.DecoderErrorVoid, 0)
+                        , (SomeShelleyEra ShelleyBasedEraDijkstra, Binary.DecoderErrorVoid, 0)
                         ]
                 )
             ]
