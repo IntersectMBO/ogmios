@@ -200,3 +200,82 @@ jobs:
       run: |
         docker stop -t 300 cardano-node || true
         docker rm cardano-node || true
+
+  # Preview has no Dijkstra blocks, so this job makes its own Dijkstra devnet.
+  dijkstra_devnet:
+    runs-on: ubuntu-24.04
+    env:
+      # cardano-node 11.2.0
+      CARDANO_NODE_FLAKE: github:IntersectMBO/cardano-node/dac0d7ab2dfdee1f9eda901589e3c6ac8eaa1899
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: true
+        persist-credentials: false
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@b97f05dcb019ddea06450a50ef6203d2fdc19fee # v31
+      with:
+        extra_nix_config: |
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+          substituters = https://cache.iog.io/ https://cache.nixos.org/
+
+    - name: Wait for ogmios in Hydra cache
+      env:
+        TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: |
+        set -o pipefail
+        echo "Target SHA: $TARGET_SHA"
+        if ! out=$(nix eval --raw "git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1#ogmios"); then
+          echo "nix eval failed"
+          exit 1
+        fi
+        if [ -z "$out" ]; then
+          echo "nix eval returned an empty path"
+          exit 1
+        fi
+        drv=$(nix eval --raw "git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1#ogmios.drvPath" 2>/dev/null || true)
+        echo "Resolved store path: $out"
+        echo "Derivation path:     $drv"
+        echo "Waiting for $out in cache..."
+        deadline=$((SECONDS + 1800))
+        while true; do
+          if nix path-info --refresh --store https://cache.iog.io "$out" >/dev/null 2>&1; then
+            echo "Found in cache"
+            break
+          fi
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "Timed out after 30 minutes waiting for Hydra cache (path: $out)"
+            exit 1
+          fi
+          echo "Not in cache yet, waiting 30s..."
+          sleep 30
+        done
+
+    - name: Download ogmios binary from Hydra cache
+      env:
+        TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: |
+        nix build "git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1#ogmios" \
+          --builders "" --max-jobs 0
+        mkdir -p server/bin
+        cp result/bin/ogmios server/bin/ogmios
+        chmod +x server/bin/ogmios
+
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: lts/jod
+
+    - name: Build TypeScript client
+      working-directory: clients/TypeScript
+      run: |
+        yarn install --frozen-lockfile --non-interactive --logevel=error
+        yarn build
+
+    - name: Run the Dijkstra devnet test
+      run: |
+        nix shell "$CARDANO_NODE_FLAKE#cardano-testnet" "$CARDANO_NODE_FLAKE#cardano-node" "$CARDANO_NODE_FLAKE#cardano-cli" -c \
+          scripts/dijkstra-devnet-test.sh server/bin/ogmios \
+          yarn --cwd clients/TypeScript/packages/client test DijkstraDevnet
