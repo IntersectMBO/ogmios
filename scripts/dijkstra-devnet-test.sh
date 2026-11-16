@@ -6,8 +6,9 @@
 
 # dijkstra-devnet-test.sh
 #
-#   Start a local devnet in the Dijkstra era, with Ogmios on it. Put a
-#   transaction with a sub-transaction on chain. Then run COMMAND, with
+#   Start a local devnet in the Dijkstra era, with Ogmios on it. Build a
+#   transaction with a sub-transaction, but do not submit it. Then run
+#   COMMAND, with DIJKSTRA_TX_CBOR set to the transaction (in base16), and
 #   DIJKSTRA_TX_ID and DIJKSTRA_SUB_TX_ID set to the ids of both.
 #   Everything started here stops when the script ends. The files of the
 #   devnet are removed, unless the script fails.
@@ -98,11 +99,6 @@ lovelace_of() {
   cli query utxo --tx-in "$1" --output-json | jq -r '.[].value.lovelace'
 }
 
-# Once the transaction is in a block, its output is in the UTxO set.
-on_chain() {
-  [ -n "$(lovelace_of "$DIJKSTRA_TX_ID#0")" ]
-}
-
 echo "Starting the devnet in $WORK."
 cardano-testnet create-env --num-pool-nodes 1 --testnet-magic "$MAGIC" --output "$WORK/env" \
   > "$WORK/create-env.log" 2>&1 || fail "cardano-testnet create-env failed"
@@ -160,10 +156,8 @@ cardano-cli dijkstra transaction sign \
 
 DIJKSTRA_SUB_TX_ID=$(cardano-cli dijkstra sub-transaction txid --signed-sub-tx-file "$WORK/sub.signed.json" --output-text)
 DIJKSTRA_TX_ID=$(cardano-cli dijkstra transaction txid --tx-file "$WORK/signed.json" --output-text)
-export DIJKSTRA_SUB_TX_ID DIJKSTRA_TX_ID
-echo "Submitting transaction $DIJKSTRA_TX_ID with sub-transaction $DIJKSTRA_SUB_TX_ID."
-cli dijkstra transaction submit --tx-file "$WORK/signed.json"
-
-wait_for 120 on_chain || fail "the transaction did not reach a block"
+DIJKSTRA_TX_CBOR=$(jq -r .cborHex "$WORK/signed.json")
+export DIJKSTRA_SUB_TX_ID DIJKSTRA_TX_ID DIJKSTRA_TX_CBOR
+echo "Built transaction $DIJKSTRA_TX_ID with sub-transaction $DIJKSTRA_SUB_TX_ID."
 
 "$@"
