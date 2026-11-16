@@ -56,6 +56,8 @@ math: true
 
 - `submitTransaction` and `evaluateTransaction` now read transactions that use fields new in the Dijkstra era, such as sub-transactions. Before, they refused them as malformed. When a transaction cannot be read in any era, the error `data` now has a `dijkstra` entry too.
 
+- Connections now stay open while the mempool of the node holds a Dijkstra transaction. Before, they closed with no reply, for example right after a transaction was submitted in the Dijkstra era.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added
