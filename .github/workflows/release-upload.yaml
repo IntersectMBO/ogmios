@@ -54,9 +54,7 @@ jobs:
     - name: Install Nix
       uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31
       with:
-        extra_nix_config: |
-          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
-          substituters = https://cache.iog.io/ https://cache.nixos.org/
+        extra_nix_config: accept-flake-config = true
 
     # Temporary: poll the Nix cache directly until Hydra check-run reporting is
     # fixed. Both architectures are built by Hydra; wait for each.

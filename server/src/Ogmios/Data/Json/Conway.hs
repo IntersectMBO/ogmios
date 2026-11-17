@@ -771,7 +771,7 @@ encodeTx (fmt, opts) x =
        <>
         "metadata" .=? OmitWhenNothing fst auxiliary
        <>
-        Alonzo.encodeWitnessSet opts (snd <$> auxiliary) encodeScriptPurposeIndex (Cn.atWits x)
+        Alonzo.encodeWitnessSet (Alonzo.encodeScript opts) (snd <$> auxiliary) encodeScriptPurposeIndex (Cn.atWits x)
        <>
         if includeTransactionCbor opts then
            "cbor" .= encodeByteStringBase16 (encodeCbor @ConwayEra x)
@@ -851,7 +851,7 @@ encodeTxCert = \case
         encodeConwayGovCert cCert :| []
 
 encodeVotingProcedures
-    :: Cn.VotingProcedures ConwayEra
+    :: Cn.VotingProcedures era
     -> Json
 encodeVotingProcedures =
     encodeList identity . Map.foldrWithKey encodeProcedures mempty . Cn.unVotingProcedures
@@ -863,7 +863,7 @@ encodeVotingProcedures =
 encodeVotingProcedure
     :: Cn.Voter
     -> Cn.GovActionId
-    -> Cn.VotingProcedure ConwayEra
+    -> Cn.VotingProcedure era
     -> Json
 encodeVotingProcedure issuer govActionId x =
     encodeObject

@@ -78,6 +78,7 @@ describe('TransactionSubmission', () => {
             alonzo: "invalid or incomplete value of type 'Transaction': end of input",
             babbage: "invalid or incomplete value of type 'Transaction': end of input",
             conway: "invalid or incomplete value of type 'Transaction': end of input",
+            dijkstra: "invalid or incomplete value of type 'Transaction': end of input",
             mary: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 3.",
             shelley: "invalid or incomplete value of type 'Transaction': Size mismatch when decoding Object / Array. Expected 0, but found 3."
           })
@@ -105,6 +106,7 @@ describe('TransactionSubmission', () => {
               'field fee with key 2, not decoded.',
             conway: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
               'field fee with key 2, not decoded.',
+            dijkstra: "invalid or incomplete value of type 'Transaction': Annotator (DijkstraTxBodyRaw): Missing required field(s): \"fee\": 2",
             mary: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. field Fee with key 2, not decoded.",
             allegra: "invalid or incomplete value of type 'Transaction': An error occured while decoding transaction body. " +
               'field Fee with key 2, not decoded.',

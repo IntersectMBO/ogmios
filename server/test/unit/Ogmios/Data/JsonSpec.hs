@@ -17,9 +17,13 @@ import Cardano.Ledger.Api (
     AsItem,
     PlutusPurpose,
     TxCert,
+    eraProtVerLow,
  )
 import Cardano.Ledger.BaseTypes (
+    Exclusive (..),
+    Inclusive (..),
     Inject (..),
+    StrictMaybe (..),
  )
 import Cardano.Ledger.Conway (
     ConwayEra,
@@ -29,6 +33,9 @@ import Cardano.Ledger.Conway.TxInfo (
  )
 import Cardano.Ledger.Dijkstra (
     DijkstraEra,
+ )
+import Cardano.Ledger.Dijkstra.Tx (
+    unDijkstraTx,
  )
 import Cardano.Ledger.Dijkstra.TxInfo (
     DijkstraContextError,
@@ -91,8 +98,10 @@ import Ogmios.Data.Json.Orphans (
  )
 import Ogmios.Data.Json.Prelude (
     MetadataFormat (..),
+    encodeCoin,
     encodeRelativeTime,
     encodeSlotLength,
+    includeAllCbor,
     omitOptionalCbor,
  )
 import Ogmios.Data.Json.Query (
@@ -187,8 +196,15 @@ import Ogmios.Data.Protocol.TxSubmission (
     _encodeSubmitTransactionResponse,
  )
 import Ouroboros.Consensus.Cardano.Block (
-    GenTx,
+    GenTx (..),
     HardForkApplyTxErr (..),
+ )
+import Ouroboros.Consensus.Ledger.SupportsMempool (
+    ConvertRawTxId (..),
+    txId,
+ )
+import Ouroboros.Consensus.Shelley.Ledger.Mempool (
+    GenTx (..),
  )
 import Ouroboros.Network.Block (
     Point (..),
@@ -283,6 +299,7 @@ import Test.QuickCheck (
     oneof,
     property,
     quickCheckWithResult,
+    suchThatMap,
     vectorOf,
     withNumTests,
     (===),
@@ -295,19 +312,33 @@ import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Conway as Conway
 import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
+import qualified Ogmios.Data.Json.Mary as Mary
+import qualified Ogmios.Data.Json.Shelley as Shelley
 
+import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Alonzo.Plutus.TxInfo as Al
+import qualified Cardano.Ledger.Alonzo.TxAuxData as Al
+import qualified Cardano.Ledger.Alonzo.TxWits as Al
+import qualified Cardano.Ledger.Api as Ledger
 import qualified Cardano.Ledger.Binary as Binary
+import qualified Cardano.Ledger.Conway.Governance as Cn
+import qualified Cardano.Ledger.Core as Ledger
+import qualified Cardano.Ledger.Credential as Ledger
+import qualified Cardano.Ledger.Dijkstra.Scripts as Di
+import qualified Cardano.Ledger.Dijkstra.TxBody as Di
+import qualified Cardano.Ledger.Mary.Value as Ma
 import qualified Cardano.Ledger.Plutus.Data as Ledger
 import qualified Codec.Json.Rpc as Rpc
 import qualified Codec.Json.Rpc.Handler as Rpc
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Encode.Pretty as Json
 import qualified Data.Aeson.Encoding as Json
+import qualified Data.Aeson.Key as Json
 import qualified Data.Aeson.KeyMap as Json
 import qualified Data.Aeson.Types as Json
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Test.QuickCheck as QC
@@ -470,6 +501,24 @@ spec = do
             refs <- unsafeReadSchemaRef "ogmios.json#/properties/NextTransactionResponse"
             runQuickCheck $ withNumTests 1 $ prop_validateToJSON identity refs json
 
+        specify "Golden: Transaction_Dijkstra_1" $ do
+            -- A real transaction from a local testnet, made with cardano-cli.
+            hex <- readFileBS ($(getProjectRoot) <> "/test/golden/Transaction_Dijkstra_1.cbor.hex")
+            tx <-
+                either (fail . show) pure
+                    $ Binary.decodeFullAnnotator
+                        (eraProtVerLow @DijkstraEra)
+                        "Tx"
+                        Binary.decCBOR
+                        (toLazy $ unsafeDecodeBase16 $ T.strip $ decodeUtf8 hex)
+            let json =
+                    inefficientEncodingToValue
+                        $ Dijkstra.encodeTx (MetadataNoSchema, includeAllCbor) (unDijkstraTx tx)
+            expected <- decodeFileThrow "Transaction_Dijkstra_1.json"
+            json `shouldBe` expected
+            refs <- unsafeReadSchemaRef "cardano.json#/definitions/Transaction"
+            runQuickCheck $ withNumTests 1 $ prop_validateToJSON identity refs json
+
         context "Data / BinaryData" $ do
             prop "arbitrary"
                 $ forAll genData propBinaryDataRoundtrip
@@ -487,6 +536,10 @@ spec = do
                     \288783B58045D4AE82A18867D8352D02775AD87981D87981D87981581C\
                     \121FD22E0B57AC206FEFC763F8BFA0771919F5218B40691EEA4514D0D8\
                     \7A80D87A801A002625A0D87983D879801A000F4240D879811A000FA92E"
+
+    context "Dijkstra transactions" $ do
+        prop "no field is dropped from the JSON"
+            $ forAllBlind (reasonablySized genDijkstraTx) propNoFieldDropped
 
     context "SlotLength" $ do
         let matrix =
@@ -539,6 +592,17 @@ spec = do
 
     context "validate transaction submission request/response against JSON-schema" $ do
         prop "deserialise signed transactions" prop_parseSubmitTransaction
+        specify "deserialise a Dijkstra transaction with sub-transactions" $ do
+            hex <- readFileBS ($(getProjectRoot) <> "/test/golden/Transaction_Dijkstra_1.cbor.hex")
+            expected <- decodeFileThrow "Transaction_Dijkstra_1.json"
+            let json = Json.object ["cbor" .= T.strip (decodeUtf8 hex)]
+            case Json.parseEither (parseJSON @(MultiEraDecoder (GenTx Block))) json of
+                Right (MultiEraDecoderSuccess tx@GenTxDijkstra{}) -> do
+                    let expectedId = Json.Object (Json.filterWithKey (\k _ -> k == "id") expected)
+                    inefficientEncodingToValue (encodeGenTxId (txId tx)) `shouldBe` expectedId
+                    Json.object ["id" .= encodeBase16 (fromShort (toRawTxIdHash (txId tx)))] `shouldBe` expectedId
+                result ->
+                    expectationFailure (show result)
         validateToJSON
             (arbitrary @(Rpc.Response (SubmitTransactionResponse Block)))
             ( _encodeSubmitTransactionResponse
@@ -1074,7 +1138,7 @@ instance Arbitrary (NextBlockResponse Block) where
     shrink = genericShrink
     arbitrary =
         frequency
-            [ (10, RollForward <$> reasonablySized arbitrary <*> genTipNoGenesis)
+            [ (10, RollForward <$> reasonablySized genBlock <*> genTipNoGenesis)
             , (1, RollBackward <$> arbitrary <*> arbitrary)
             ]
 
@@ -1101,6 +1165,7 @@ instance Arbitrary (SubmitTransactionResponse Block) where
                         , (SomeShelleyEra ShelleyBasedEraAlonzo, Binary.DecoderErrorVoid, 0)
                         , (SomeShelleyEra ShelleyBasedEraBabbage, Binary.DecoderErrorVoid, 0)
                         , (SomeShelleyEra ShelleyBasedEraConway, Binary.DecoderErrorVoid, 0)
+                        , (SomeShelleyEra ShelleyBasedEraDijkstra, Binary.DecoderErrorVoid, 0)
                         ]
                 )
             ]
@@ -1312,6 +1377,216 @@ unsafeDataFromBytes =
         . Ledger.makeBinaryData
         . either error toShort
         . decodeBase16
+
+genDijkstraTx :: Gen (Ledger.Tx Ledger.TopTx DijkstraEra)
+genDijkstraTx =
+    genTx `suchThatMap` \case
+        GenTxDijkstra (ShelleyTx _ tx) -> Just tx
+        _ -> Nothing
+
+-- | Each field that is not empty in the transaction is in the JSON, with the
+-- same number of items. Some nested values are in the JSON too, each at its
+-- place: the datums of top-level guards, the credit amounts, the datums of
+-- outputs, the mint quantities and the account balance intervals. The same
+-- holds in each sub-transaction.
+propNoFieldDropped :: Ledger.Tx Ledger.TopTx DijkstraEra -> Property
+propNoFieldDropped tx =
+    case inefficientEncodingToValue (Dijkstra.encodeTx (MetadataNoSchema, omitOptionalCbor) (unDijkstraTx tx)) of
+        Json.Object json ->
+            conjoin (topLevelFields json <> sharedFields json tx <> subTransactions json)
+                & counterexample (decodeUtf8 $ Json.encodePretty json)
+        _ ->
+            property False
+  where
+    body = tx ^. Ledger.bodyTxL
+
+    subTxs = toList (body ^. Di.subTransactionsTxBodyL)
+
+    topLevelFields json =
+        [ hasItems size json "collaterals" (length (body ^. Ledger.collateralInputsTxBodyL))
+        , hasItems present json "collateralReturn" (length (body ^. Ledger.collateralReturnTxBodyL))
+        , hasItems present json "totalCollateral" (length (body ^. Ledger.totalCollateralTxBodyL))
+        , hasItems present json "fee" 1
+        , hasItems size json "startingAccountBalanceIntervals"
+            (length (Di.unAccountBalanceIntervals (body ^. Di.startingAccountBalanceIntervalsTxBodyL)))
+        , hasItems size json "subTransactions" (length subTxs)
+        , hasValues json
+            (intervalValues "startingAccountBalanceIntervals" (body ^. Di.startingAccountBalanceIntervalsTxBodyL))
+        ]
+
+    subTransactions json =
+        case Json.lookup "subTransactions" json of
+            Just (Json.Array xs) ->
+                [ sharedFields subJson subTx
+                    & conjoin
+                    & counterexample ("in sub-transaction " <> show i)
+                | (i :: Int, Json.Object subJson, subTx) <- zip3 [0 ..] (toList xs) subTxs
+                ]
+            _ ->
+                []
+
+-- | The fields of a top-level transaction which sub-transactions have too.
+sharedFields :: Json.KeyMap Json.Value -> Ledger.Tx l DijkstraEra -> [Property]
+sharedFields json tx =
+    [ hasItems size json "inputs" (length (body ^. Ledger.inputsTxBodyL))
+    , hasItems size json "references" (length (body ^. Ledger.referenceInputsTxBodyL))
+    , hasItems size json "outputs" (length (body ^. Ledger.outputsTxBodyL))
+    , -- One ledger certificate can show as two JSON items.
+      hasItems size json "certificates" (sum (length . Dijkstra.encodeTxCert <$> body ^. Ledger.certsTxBodyL))
+    , hasItems size json "withdrawals" (length (Ledger.unWithdrawals (body ^. Ledger.withdrawalsTxBodyL)))
+    , hasItems size json "credits" (length (Ledger.unDirectDeposits (body ^. Di.directDepositsTxBodyL)))
+    , hasItems sizeOfEach json "mint" (sum (length <$> mint))
+    , hasItems size json "requiredExtraSignatories" (count isKey guards)
+    , hasItems size json "guards" (length guards)
+    , hasItems size json "topLevelGuards" (length (body ^. Di.requiredTopLevelGuardsL))
+    , hasItems present json "network" (length (body ^. Ledger.networkIdTxBodyL))
+    , hasItems present json "scriptIntegrityHash" (length (body ^. Ledger.scriptIntegrityHashTxBodyL))
+    , hasItems size json "validityInterval" (count isSJust [invalidBefore, invalidAfter])
+    , hasItems size json "proposals" (length (body ^. Ledger.proposalProceduresTxBodyL))
+    , hasItems size json "votes" (sum (length <$> Cn.unVotingProcedures (body ^. Ledger.votingProceduresTxBodyL)))
+    , hasItems size json "treasury" (length treasuryValue + count (/= mempty) [treasuryDonation])
+    , hasItems size json "accountBalanceIntervals"
+        (length (Di.unAccountBalanceIntervals (body ^. Di.accountBalanceIntervalsTxBodyL)))
+    , hasItems size json "signatories" (length (wits ^. Ledger.addrTxWitsL) + length (wits ^. Ledger.bootAddrTxWitsL))
+    , hasItems size json "scripts" (length ((wits ^. Ledger.scriptTxWitsL) `Map.union` auxiliaryScripts))
+    , hasItems size json "datums" (length (Al.unTxDats (wits ^. Ledger.datsTxWitsL)))
+    , hasItems size json "redeemers" (length (Al.unRedeemers (wits ^. Ledger.rdmrsTxWitsL)))
+    , hasItems sizeOfLabels json "metadata" (sum (length . (^. Ledger.metadataTxAuxDataL) <$> auxiliaryData))
+    , hasItems size json "requiredExtraScripts" (length auxiliaryScripts)
+    , hasValues json nestedValues
+    ]
+  where
+    body = tx ^. Ledger.bodyTxL
+    wits = tx ^. Ledger.witsTxL
+
+    nestedValues =
+        Map.fromList
+            [ ([Json.Key "topLevelGuards", Json.Index i, Json.Key "datum"], inefficientEncodingToValue (Alonzo.encodeData datum))
+            | (i, (_, SJust datum)) <- zip [0 ..] (Map.toList (body ^. Di.requiredTopLevelGuardsL))
+            ]
+            <> mconcat
+                [ leaves [Json.Key "credits", textKey (Shelley.stringifyRewardAcnt account)] (inefficientEncodingToValue (encodeCoin amount))
+                | (account, amount) <- Map.toList (Ledger.unDirectDeposits (body ^. Di.directDepositsTxBodyL))
+                ]
+            <> Map.fromList
+                [ datum
+                | (i, output) <- zip [0 ..] (toList (body ^. Ledger.outputsTxBodyL))
+                , datum <- case output ^. Ledger.datumTxOutL of
+                    Ledger.NoDatum ->
+                        []
+                    Ledger.DatumHash hash ->
+                        [([Json.Key "outputs", Json.Index i, Json.Key "datumHash"], inefficientEncodingToValue (Alonzo.encodeDataHash hash))]
+                    Ledger.Datum binaryData ->
+                        [([Json.Key "outputs", Json.Index i, Json.Key "datum"], inefficientEncodingToValue (Alonzo.encodeBinaryData binaryData))]
+                ]
+            <> Map.fromList
+                [ ([Json.Key "mint", textKey (Mary.stringifyPolicyId policy), textKey (Mary.stringifyAssetName asset)], toJSON quantity)
+                | (policy, assets) <- Map.toList mint
+                , (asset, quantity) <- Map.toList assets
+                ]
+            <> intervalValues "accountBalanceIntervals" (body ^. Di.accountBalanceIntervalsTxBodyL)
+
+    Ma.MultiAsset mint = body ^. Ledger.mintTxBodyL
+
+    guards = toList (body ^. Di.guardsTxBodyL)
+
+    isKey = \case
+        Ledger.KeyHashObj{} -> True
+        Ledger.ScriptHashObj{} -> False
+
+    Ledger.ValidityInterval invalidBefore invalidAfter = body ^. Ledger.vldtTxBodyL
+
+    treasuryValue = body ^. Ledger.currentTreasuryValueTxBodyL
+    treasuryDonation = body ^. Ledger.treasuryDonationTxBodyL
+
+    -- The JSON shows the auxiliary data only when the body has its hash too.
+    -- The ledger always needs both.
+    auxiliaryData =
+        [ auxData
+        | isSJust (body ^. Ledger.auxDataHashTxBodyL)
+        , auxData <- toList (tx ^. Ledger.auxDataTxL)
+        ]
+
+    auxiliaryScripts =
+        Map.fromList
+            [ (Ledger.hashScript @DijkstraEra script, script)
+            | script <- foldMap (toList . Al.getAlonzoTxAuxDataScripts) auxiliaryData
+            ]
+
+-- | With 'n' items in the ledger, the JSON key is there and has 'n' items too.
+-- With no items, the key may be left out.
+hasItems :: (Json.Value -> Int) -> Json.KeyMap Json.Value -> Json.Key -> Int -> Property
+hasItems itemsOf json key n
+    | n == 0 =
+        property True
+    | otherwise =
+        (itemsOf <$> Json.lookup key json)
+            === Just n
+            & counterexample ("JSON key: " <> show key)
+
+-- | Each of the expected values is in the JSON, at its path.
+hasValues :: Json.KeyMap Json.Value -> Map Json.JSONPath Json.Value -> Property
+hasValues json expected =
+    Map.mapKeys Json.formatPath (Map.filterWithKey (\path value -> Map.lookup path found /= Just value) expected)
+        === mempty
+        & counterexample "Values missing from the JSON, or different, by path"
+  where
+    found = leaves [] (Json.Object json)
+
+-- | The values of a JSON value which are neither objects nor arrays, by path.
+leaves :: Json.JSONPath -> Json.Value -> Map Json.JSONPath Json.Value
+leaves path = \case
+    Json.Object xs ->
+        mconcat [leaves (path <> [Json.Key k]) v | (k, v) <- Json.toList xs]
+    Json.Array xs ->
+        mconcat [leaves (path <> [Json.Index i]) v | (i, v) <- zip [0 ..] (toList xs)]
+    value ->
+        Map.singleton path value
+
+-- | A path element for an object key that comes from a value.
+textKey :: Text -> Json.JSONPathElement
+textKey = Json.Key . Json.fromText
+
+-- | The account and the bounds of each account balance interval, by path.
+intervalValues :: Json.Key -> Di.AccountBalanceIntervals DijkstraEra -> Map Json.JSONPath Json.Value
+intervalValues key intervals =
+    mconcat
+        [ Map.singleton (path <> [Json.Key "account"]) (toJSON (Shelley.stringifyRewardAcnt account))
+            <> mconcat
+                [ leaves (path <> [Json.Key name]) (inefficientEncodingToValue (encodeCoin amount))
+                | (name, amount) <- bounds interval
+                ]
+        | (i, (account, interval)) <- zip [0 ..] (Map.toList (Di.unAccountBalanceIntervals intervals))
+        , let path = [Json.Key key, Json.Index i]
+        ]
+  where
+    bounds = \case
+        Di.AccountBalanceLowerBound (Inclusive lo) -> [("atLeast", lo)]
+        Di.AccountBalanceUpperBound (Exclusive hi) -> [("atMost", hi)]
+        Di.AccountBalanceBothBounds (Inclusive lo) (Exclusive hi) -> [("atLeast", lo), ("atMost", hi)]
+        Di.AccountBalanceExact amount -> [("exactly", amount)]
+
+count :: (Foldable f) => (a -> Bool) -> f a -> Int
+count p = length . filter p . toList
+
+present :: Json.Value -> Int
+present = const 1
+
+size :: Json.Value -> Int
+size = \case
+    Json.Array xs -> length xs
+    Json.Object xs -> length xs
+    _ -> 1
+
+sizeOfEach :: Json.Value -> Int
+sizeOfEach = \case
+    Json.Object xs -> sum (size <$> toList xs)
+    _ -> 0
+
+sizeOfLabels :: Json.Value -> Int
+sizeOfLabels = \case
+    Json.Object xs -> maybe 0 size (Json.lookup "labels" xs)
+    _ -> 0
 
 --
 -- Local State Query

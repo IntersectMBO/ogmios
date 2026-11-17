@@ -142,6 +142,8 @@ upgradeGenTx = \case
         pure $ GenTxConway $ ShelleyTx hash txConway
     latest@(GenTxConway _)->
         Right latest
+    latest@(GenTxDijkstra _)->
+        Right latest
 
 unsafeFromRight :: (HasCallStack) => Either Text a -> a
 unsafeFromRight = either error id
