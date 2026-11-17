@@ -200,6 +200,7 @@ import Ouroboros.Consensus.Cardano.Block (
     HardForkApplyTxErr (..),
  )
 import Ouroboros.Consensus.Ledger.SupportsMempool (
+    ConvertRawTxId (..),
     txId,
  )
 import Ouroboros.Consensus.Shelley.Ledger.Mempool (
@@ -596,9 +597,10 @@ spec = do
             expected <- decodeFileThrow "Transaction_Dijkstra_1.json"
             let json = Json.object ["cbor" .= T.strip (decodeUtf8 hex)]
             case Json.parseEither (parseJSON @(MultiEraDecoder (GenTx Block))) json of
-                Right (MultiEraDecoderSuccess tx@GenTxDijkstra{}) ->
-                    inefficientEncodingToValue (encodeGenTxId (txId tx))
-                        `shouldBe` Json.Object (Json.filterWithKey (\k _ -> k == "id") expected)
+                Right (MultiEraDecoderSuccess tx@GenTxDijkstra{}) -> do
+                    let expectedId = Json.Object (Json.filterWithKey (\k _ -> k == "id") expected)
+                    inefficientEncodingToValue (encodeGenTxId (txId tx)) `shouldBe` expectedId
+                    Json.object ["id" .= encodeBase16 (fromShort (toRawTxIdHash (txId tx)))] `shouldBe` expectedId
                 result ->
                     expectationFailure (show result)
         validateToJSON
