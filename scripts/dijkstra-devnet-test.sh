@@ -9,7 +9,8 @@
 #   Start a local devnet in the Dijkstra era, with Ogmios on it. Put a
 #   transaction with a sub-transaction on chain. Then run COMMAND, with
 #   DIJKSTRA_TX_ID and DIJKSTRA_SUB_TX_ID set to the ids of both.
-#   Everything started here stops when the script ends.
+#   Everything started here stops when the script ends. The files of the
+#   devnet are removed, unless the script fails.
 #
 #   Needs cardano-testnet, cardano-node (11.2.0 or later), cardano-cli, jq and
 #   curl on the PATH. Ogmios listens on port 1337.
@@ -32,12 +33,30 @@ WORK=$(mktemp -d /tmp/devnet.XXXXXX)
 SOCKET="$WORK/env/socket/node1/sock"
 PIDS=()
 
+# Whether the processes started here have all exited.
+none_running() {
+  local pid
+  for pid in "${PIDS[@]}" "$(cat "$WORK/env/logs/node1/node.pid" 2>/dev/null)"; do
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      return 1
+    fi
+  done
+}
+
 stop() {
+  local status=$?
   for pid in "${PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
   if [ -f "$WORK/env/logs/node1/node.pid" ]; then
     kill "$(cat "$WORK/env/logs/node1/node.pid")" 2>/dev/null || true
+  fi
+  if [ "$status" -eq 0 ]; then
+    # Wait for them to exit, or files they still write could stay behind.
+    wait_for 30 none_running || true
+    rm -rf "$WORK" 2>/dev/null || true
+  else
+    echo "The devnet files are in $WORK."
   fi
 }
 trap stop EXIT
