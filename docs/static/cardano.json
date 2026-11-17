@@ -10,13 +10,10 @@
         , "title": "AccountBalanceIntervalAtLeast"
         , "description": "Minimum (inclusive) balance of the account."
         , "additionalProperties": false
-        , "required": [ "from", "credential", "atLeast" ]
+        , "required": [ "account", "atLeast" ]
         , "properties":
-          { "from":
-            { "$ref": "cardano.json#/definitions/CredentialOrigin"
-            }
-          , "credential":
-            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+          { "account":
+            { "$ref": "cardano.json#/definitions/RewardAccount"
             }
           , "atLeast":
             { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
@@ -27,13 +24,10 @@
         , "title": "AccountBalanceIntervalAtMost"
         , "description": "Maximum (exclusive) balance of the account."
         , "additionalProperties": false
-        , "required": [ "from", "credential", "atMost" ]
+        , "required": [ "account", "atMost" ]
         , "properties":
-          { "from":
-            { "$ref": "cardano.json#/definitions/CredentialOrigin"
-            }
-          , "credential":
-            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+          { "account":
+            { "$ref": "cardano.json#/definitions/RewardAccount"
             }
           , "atMost":
             { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
@@ -44,13 +38,10 @@
         , "title": "AccountBalanceIntervalWithin"
         , "description": "Minimum (inclusive) and maximum (exclusive) balances of the account."
         , "additionalProperties": false
-        , "required": [ "from", "credential", "atLeast", "atMost" ]
+        , "required": [ "account", "atLeast", "atMost" ]
         , "properties":
-          { "from":
-            { "$ref": "cardano.json#/definitions/CredentialOrigin"
-            }
-          , "credential":
-            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+          { "account":
+            { "$ref": "cardano.json#/definitions/RewardAccount"
             }
           , "atLeast":
             { "$ref": "cardano.json#/definitions/Value<AdaOnly>"
@@ -64,13 +55,10 @@
         , "title": "AccountBalanceIntervalExactly"
         , "description": "Exact balance of the account."
         , "additionalProperties": false
-        , "required": [ "from", "credential", "exactly" ]
+        , "required": [ "account", "exactly" ]
         , "properties":
-          { "from":
-            { "$ref": "cardano.json#/definitions/CredentialOrigin"
-            }
-          , "credential":
-            { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+          { "account":
+            { "$ref": "cardano.json#/definitions/RewardAccount"
             }
           , "exactly":
             { "$ref": "cardano.json#/definitions/Value<AdaOnly>"

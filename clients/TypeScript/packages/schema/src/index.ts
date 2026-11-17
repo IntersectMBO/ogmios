@@ -1220,24 +1220,21 @@ export interface RedeemerPointer {
  * Minimum (inclusive) balance of the account.
  */
 export interface AccountBalanceIntervalAtLeast {
-  from: CredentialOrigin;
-  credential: DigestBlake2B224;
+  account: RewardAccount;
   atLeast: ValueAdaOnly;
 }
 /**
  * Maximum (exclusive) balance of the account.
  */
 export interface AccountBalanceIntervalAtMost {
-  from: CredentialOrigin;
-  credential: DigestBlake2B224;
+  account: RewardAccount;
   atMost: ValueAdaOnly;
 }
 /**
  * Minimum (inclusive) and maximum (exclusive) balances of the account.
  */
 export interface AccountBalanceIntervalWithin {
-  from: CredentialOrigin;
-  credential: DigestBlake2B224;
+  account: RewardAccount;
   atLeast: ValueAdaOnly;
   atMost: ValueAdaOnly;
 }
@@ -1245,8 +1242,7 @@ export interface AccountBalanceIntervalWithin {
  * Exact balance of the account.
  */
 export interface AccountBalanceIntervalExactly {
-  from: CredentialOrigin;
-  credential: DigestBlake2B224;
+  account: RewardAccount;
   exactly: ValueAdaOnly;
 }
 /**

@@ -23,8 +23,6 @@ module Ogmios.Data.Json.Dijkstra (
 import Ogmios.Data.Json.Prelude
 
 import Cardano.Ledger.Address (
-    AccountAddress (..),
-    AccountId (..),
     DirectDeposits (..),
  )
 import Cardano.Ledger.Alonzo.Plutus.Context (
@@ -334,10 +332,10 @@ encodeAccountBalanceIntervals ::
 encodeAccountBalanceIntervals =
     encodeMapAsList encodeEntry . Di.unAccountBalanceIntervals
   where
-    encodeEntry (AccountAddress _network (AccountId credential)) interval =
+    encodeEntry account interval =
         encodeObject
-            ( "credential"
-                `Shelley.encodeCredential` credential
+            ( "account"
+                .= Shelley.encodeRewardAcnt account
                 <> case interval of
                     Di.AccountBalanceLowerBound (Inclusive lo) ->
                         "atLeast" .= encodeCoin lo

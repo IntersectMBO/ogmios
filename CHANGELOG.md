@@ -51,7 +51,7 @@ math: true
   - `guards`: the keys and scripts that guard the transaction, each with `from` and `credential`, in the ledger's order. The index of a redeemer with purpose `guard` points into this list. Keys are also listed in `requiredExtraSignatories`.
   - `topLevelGuards`: the guards that the top-level transaction must list, each with `from`, `credential` and, for Plutus scripts, a `datum`.
   - `credits`: amounts paid directly into accounts, with the same shape as `withdrawals`.
-  - `accountBalanceIntervals`: conditions on account balances, each with `from`, `credential` and either `atLeast`, `atMost`, both, or `exactly`.
+  - `accountBalanceIntervals`: conditions on account balances, each with the stake address of the `account` and either `atLeast`, `atMost`, both, or `exactly`.
   - `startingAccountBalanceIntervals` (top-level transactions only): the same conditions, checked against the balances before the transaction and its sub-transactions are applied.
 
 ### [6.14.0] - 2025-10-16
