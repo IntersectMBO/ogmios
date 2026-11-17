@@ -20,7 +20,10 @@ import Cardano.Ledger.Api (
     eraProtVerLow,
  )
 import Cardano.Ledger.BaseTypes (
+    Exclusive (..),
+    Inclusive (..),
     Inject (..),
+    StrictMaybe (..),
  )
 import Cardano.Ledger.Conway (
     ConwayEra,
@@ -95,6 +98,7 @@ import Ogmios.Data.Json.Orphans (
  )
 import Ogmios.Data.Json.Prelude (
     MetadataFormat (..),
+    encodeCoin,
     encodeRelativeTime,
     encodeSlotLength,
     includeAllCbor,
@@ -304,6 +308,8 @@ import qualified Ogmios.Data.Json.Alonzo as Alonzo
 import qualified Ogmios.Data.Json.Babbage as Babbage
 import qualified Ogmios.Data.Json.Conway as Conway
 import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
+import qualified Ogmios.Data.Json.Mary as Mary
+import qualified Ogmios.Data.Json.Shelley as Shelley
 
 import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Alonzo.Plutus.TxInfo as Al
@@ -323,6 +329,7 @@ import qualified Codec.Json.Rpc.Handler as Rpc
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Encode.Pretty as Json
 import qualified Data.Aeson.Encoding as Json
+import qualified Data.Aeson.Key as Json
 import qualified Data.Aeson.KeyMap as Json
 import qualified Data.Aeson.Types as Json
 import qualified Data.ByteString as BS
@@ -1362,7 +1369,10 @@ genDijkstraTx =
         _ -> Nothing
 
 -- | Each field that is not empty in the transaction is in the JSON, with the
--- same number of items. The same holds in each sub-transaction.
+-- same number of items. Some nested values are in the JSON too, each at its
+-- place: the datums of top-level guards, the credit amounts, the datums of
+-- outputs, the mint quantities and the account balance intervals. The same
+-- holds in each sub-transaction.
 propNoFieldDropped :: Ledger.Tx Ledger.TopTx DijkstraEra -> Property
 propNoFieldDropped tx =
     case inefficientEncodingToValue (Dijkstra.encodeTx (MetadataNoSchema, omitOptionalCbor) (unDijkstraTx tx)) of
@@ -1384,6 +1394,8 @@ propNoFieldDropped tx =
         , hasItems size json "startingAccountBalanceIntervals"
             (length (Di.unAccountBalanceIntervals (body ^. Di.startingAccountBalanceIntervalsTxBodyL)))
         , hasItems size json "subTransactions" (length subTxs)
+        , hasValues json
+            (intervalValues "startingAccountBalanceIntervals" (body ^. Di.startingAccountBalanceIntervalsTxBodyL))
         ]
 
     subTransactions json =
@@ -1425,10 +1437,38 @@ sharedFields json tx =
     , hasItems size json "redeemers" (length (Al.unRedeemers (wits ^. Ledger.rdmrsTxWitsL)))
     , hasItems sizeOfLabels json "metadata" (sum (length . (^. Ledger.metadataTxAuxDataL) <$> auxiliaryData))
     , hasItems size json "requiredExtraScripts" (length auxiliaryScripts)
+    , hasValues json nestedValues
     ]
   where
     body = tx ^. Ledger.bodyTxL
     wits = tx ^. Ledger.witsTxL
+
+    nestedValues =
+        Map.fromList
+            [ ([Json.Key "topLevelGuards", Json.Index i, Json.Key "datum"], inefficientEncodingToValue (Alonzo.encodeData datum))
+            | (i, (_, SJust datum)) <- zip [0 ..] (Map.toList (body ^. Di.requiredTopLevelGuardsL))
+            ]
+            <> mconcat
+                [ leaves [Json.Key "credits", textKey (Shelley.stringifyRewardAcnt account)] (inefficientEncodingToValue (encodeCoin amount))
+                | (account, amount) <- Map.toList (Ledger.unDirectDeposits (body ^. Di.directDepositsTxBodyL))
+                ]
+            <> Map.fromList
+                [ datum
+                | (i, output) <- zip [0 ..] (toList (body ^. Ledger.outputsTxBodyL))
+                , datum <- case output ^. Ledger.datumTxOutL of
+                    Ledger.NoDatum ->
+                        []
+                    Ledger.DatumHash hash ->
+                        [([Json.Key "outputs", Json.Index i, Json.Key "datumHash"], inefficientEncodingToValue (Alonzo.encodeDataHash hash))]
+                    Ledger.Datum binaryData ->
+                        [([Json.Key "outputs", Json.Index i, Json.Key "datum"], inefficientEncodingToValue (Alonzo.encodeBinaryData binaryData))]
+                ]
+            <> Map.fromList
+                [ ([Json.Key "mint", textKey (Mary.stringifyPolicyId policy), textKey (Mary.stringifyAssetName asset)], toJSON quantity)
+                | (policy, assets) <- Map.toList mint
+                , (asset, quantity) <- Map.toList assets
+                ]
+            <> intervalValues "accountBalanceIntervals" (body ^. Di.accountBalanceIntervalsTxBodyL)
 
     Ma.MultiAsset mint = body ^. Ledger.mintTxBodyL
 
@@ -1467,6 +1507,48 @@ hasItems itemsOf json key n
         (itemsOf <$> Json.lookup key json)
             === Just n
             & counterexample ("JSON key: " <> show key)
+
+-- | Each of the expected values is in the JSON, at its path.
+hasValues :: Json.KeyMap Json.Value -> Map Json.JSONPath Json.Value -> Property
+hasValues json expected =
+    Map.mapKeys Json.formatPath (Map.filterWithKey (\path value -> Map.lookup path found /= Just value) expected)
+        === mempty
+        & counterexample "Values missing from the JSON, or different, by path"
+  where
+    found = leaves [] (Json.Object json)
+
+-- | The values of a JSON value which are neither objects nor arrays, by path.
+leaves :: Json.JSONPath -> Json.Value -> Map Json.JSONPath Json.Value
+leaves path = \case
+    Json.Object xs ->
+        mconcat [leaves (path <> [Json.Key k]) v | (k, v) <- Json.toList xs]
+    Json.Array xs ->
+        mconcat [leaves (path <> [Json.Index i]) v | (i, v) <- zip [0 ..] (toList xs)]
+    value ->
+        Map.singleton path value
+
+-- | A path element for an object key that comes from a value.
+textKey :: Text -> Json.JSONPathElement
+textKey = Json.Key . Json.fromText
+
+-- | The account and the bounds of each account balance interval, by path.
+intervalValues :: Json.Key -> Di.AccountBalanceIntervals DijkstraEra -> Map Json.JSONPath Json.Value
+intervalValues key intervals =
+    mconcat
+        [ Map.singleton (path <> [Json.Key "account"]) (toJSON (Shelley.stringifyRewardAcnt account))
+            <> mconcat
+                [ leaves (path <> [Json.Key name]) (inefficientEncodingToValue (encodeCoin amount))
+                | (name, amount) <- bounds interval
+                ]
+        | (i, (account, interval)) <- zip [0 ..] (Map.toList (Di.unAccountBalanceIntervals intervals))
+        , let path = [Json.Key key, Json.Index i]
+        ]
+  where
+    bounds = \case
+        Di.AccountBalanceLowerBound (Inclusive lo) -> [("atLeast", lo)]
+        Di.AccountBalanceUpperBound (Exclusive hi) -> [("atMost", hi)]
+        Di.AccountBalanceBothBounds (Inclusive lo) (Exclusive hi) -> [("atLeast", lo), ("atMost", hi)]
+        Di.AccountBalanceExact amount -> [("exactly", amount)]
 
 count :: (Foldable f) => (a -> Bool) -> f a -> Int
 count p = length . filter p . toList
