@@ -302,8 +302,14 @@ genTx = oneof
 --
 -- The ledger decodes the datums of top-level guards in Dijkstra transaction
 -- bodies with a decoder that needs the original bytes, which the consensus
--- block and transaction decoders do not provide. Such transactions are
--- therefore left out of specs going through the codec.
+-- block and transaction decoders do not provide. This is not only a test
+-- problem: Ogmios uses the same decoders, so it cannot read a real block or
+-- mempool transaction with such a datum either, and cardano-node 11.2.0 refuses
+-- such transactions. They are therefore left out of specs going through the
+-- codec. The ledger fixes this in
+-- https://github.com/IntersectMBO/cardano-ledger/pull/6189, which no release of
+-- cardano-ledger-dijkstra has yet. Once Ogmios uses one that does, this filter,
+-- 'genTxForCodec' and 'txHasGuardDatums' can go.
 genBlockForCodec :: Gen Block
 genBlockForCodec =
     genBlock `suchThat` (not . hasGuardDatums)
