@@ -271,7 +271,7 @@ jobs:
     - name: Build TypeScript client
       working-directory: clients/TypeScript
       run: |
-        yarn install --frozen-lockfile --non-interactive --logevel=error
+        yarn install --frozen-lockfile --non-interactive --loglevel=error
         yarn build
 
     - name: Run the Dijkstra devnet test
