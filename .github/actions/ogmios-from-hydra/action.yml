@@ -1,0 +1,52 @@
+name: Get ogmios from the Hydra cache
+description: Wait until Hydra has built ogmios for the commit under test, then copy its binary to server/bin/ogmios. Needs Nix.
+runs:
+  using: composite
+  steps:
+    # Temporary: poll the Nix cache directly until Hydra check-run reporting is fixed.
+    # Use the PR head SHA on pull_request events (not $GITHUB_SHA, which is the
+    # ephemeral merge commit GitHub creates server-side and that Hydra doesn't see).
+    # Falls back to $GITHUB_SHA on push events.
+    - name: Wait for ogmios in Hydra cache
+      env:
+        TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      shell: bash
+      run: |
+        set -o pipefail
+        echo "Target SHA: $TARGET_SHA"
+        if ! out=$(nix eval --raw "git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1#ogmios"); then
+          echo "nix eval failed"
+          exit 1
+        fi
+        if [ -z "$out" ]; then
+          echo "nix eval returned an empty path"
+          exit 1
+        fi
+        drv=$(nix eval --raw "git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1#ogmios.drvPath" 2>/dev/null || true)
+        echo "Resolved store path: $out"
+        echo "Derivation path:     $drv"
+        echo "Waiting for $out in cache..."
+        deadline=$((SECONDS + 1800))
+        while true; do
+          if nix path-info --refresh --store https://cache.iog.io "$out" >/dev/null 2>&1; then
+            echo "Found in cache"
+            break
+          fi
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "Timed out after 30 minutes waiting for Hydra cache (path: $out)"
+            exit 1
+          fi
+          echo "Not in cache yet, waiting 30s..."
+          sleep 30
+        done
+
+    - name: Download ogmios binary from Hydra cache
+      env:
+        TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      shell: bash
+      run: |
+        nix build "git+https://github.com/$GITHUB_REPOSITORY?rev=$TARGET_SHA&submodules=1#ogmios" \
+          --builders "" --max-jobs 0
+        mkdir -p server/bin
+        cp result/bin/ogmios server/bin/ogmios
+        chmod +x server/bin/ogmios
