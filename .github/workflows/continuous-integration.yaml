@@ -203,6 +203,10 @@ jobs:
 
   # Preview has no Dijkstra blocks, so this job makes its own Dijkstra devnet.
   dijkstra_devnet:
+    # The ogmios binary comes from Hydra, which may not build pull requests from forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # The waits for Hydra and for the devnet add up to about 50 minutes.
+    timeout-minutes: 75
     runs-on: ubuntu-24.04
     env:
       # cardano-node 11.2.0
