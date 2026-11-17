@@ -29,10 +29,13 @@ describeOnDevnet('Dijkstra devnet', () => {
       }
     })
     await client.resume(['origin'], 1)
-    const tx = await transaction
-    await client.shutdown()
+    try {
+      const tx = await transaction
 
-    expect(tx.id).toBe(transactionId)
-    expect(tx.subTransactions?.map(subTx => subTx.id)).toEqual([subTransactionId])
+      expect(tx.id).toBe(transactionId)
+      expect(tx.subTransactions?.map(subTx => subTx.id)).toEqual([subTransactionId])
+    } finally {
+      await client.shutdown()
+    }
   })
 })
