@@ -107,6 +107,7 @@ import Ogmios.Data.Json.Prelude (
 import Ogmios.Data.Json.Query (
     QueryInEra,
     SomeQuery (..),
+    decodeNativeScript,
     parseQueryLedgerConstitution,
     parseQueryLedgerConstitutionalCommittee,
     parseQueryLedgerDelegateRepresentatives,
@@ -485,7 +486,7 @@ spec = do
 
         specify "Golden: Script_Native_0.json" $ do
             json <- decodeFileThrow "Script_Native_0.json"
-            case traverse @[] (Json.parse (decodeScript @BabbageEra)) json of
+            case traverse @[] (Json.parse (decodeScript @BabbageEra decodeNativeScript)) json of
                 Json.Error e ->
                     fail (show e)
                 Json.Success{} ->

@@ -498,7 +498,7 @@ utxoFromMempool =
             go
                 ( utxo
                     & withoutKeys (inputs tx)
-                    & union (outputs tx)
+                    & mergeUtxo (outputs tx)
                 )
                 txs
 
@@ -510,23 +510,6 @@ utxoFromMempool =
             UTxOInConwayEra (UTxO (Map.withoutKeys utxo ks))
         UTxOInDijkstraEra (UTxO utxo) ->
             UTxOInDijkstraEra (UTxO (Map.withoutKeys utxo ks))
-
-    union :: MultiEraUTxO block -> MultiEraUTxO block -> MultiEraUTxO block
-    union l r = case (l, r) of
-        (UTxOInBabbageEra (UTxO ul), UTxOInBabbageEra (UTxO ur)) ->
-            UTxOInBabbageEra (UTxO (Map.union ul ur))
-        (UTxOInBabbageEra (upgrade -> (UTxO ul)), UTxOInConwayEra (UTxO ur)) ->
-            UTxOInConwayEra (UTxO (Map.union ul ur))
-        (UTxOInConwayEra (UTxO ul), UTxOInBabbageEra (upgrade -> (UTxO ur))) ->
-            UTxOInConwayEra (UTxO (Map.union ul ur))
-        (UTxOInConwayEra (UTxO ul), UTxOInConwayEra (UTxO ur)) ->
-            UTxOInConwayEra (UTxO (Map.union ul ur))
-        (UTxOInDijkstraEra (UTxO ul), UTxOInDijkstraEra (UTxO ur)) ->
-            UTxOInDijkstraEra (UTxO (Map.union ul ur))
-        (_, UTxOInDijkstraEra (UTxO ur)) ->
-            UTxOInDijkstraEra (UTxO ur)
-        (UTxOInDijkstraEra (UTxO ul), _) ->
-            UTxOInDijkstraEra (UTxO ul)
 
     newUtxoFor :: TxId -> [out] -> Map TxIn out
     newUtxoFor h outs =
@@ -594,10 +577,14 @@ mergeUtxo a b = case (a, b) of
         UTxOInConwayEra $ UTxO (Map.union l r)
     (UTxOInDijkstraEra (unUTxO -> l), UTxOInDijkstraEra (unUTxO -> r)) ->
         UTxOInDijkstraEra $ UTxO (Map.union l r)
-    (_, UTxOInDijkstraEra (unUTxO -> r)) ->
-        UTxOInDijkstraEra $ UTxO r
-    (UTxOInDijkstraEra (unUTxO -> l), _) ->
-        UTxOInDijkstraEra $ UTxO l
+    (UTxOInBabbageEra (unUTxO -> l), UTxOInDijkstraEra (unUTxO -> r)) ->
+        UTxOInDijkstraEra $ UTxO (Map.union (upgrade . upgrade <$> l) r)
+    (UTxOInDijkstraEra (unUTxO -> l), UTxOInBabbageEra (unUTxO -> r)) ->
+        UTxOInDijkstraEra $ UTxO (Map.union l (upgrade . upgrade <$> r))
+    (UTxOInConwayEra (unUTxO -> l), UTxOInDijkstraEra (unUTxO -> r)) ->
+        UTxOInDijkstraEra $ UTxO (Map.union (upgrade <$> l) r)
+    (UTxOInDijkstraEra (unUTxO -> l), UTxOInConwayEra (unUTxO -> r)) ->
+        UTxOInDijkstraEra $ UTxO (Map.union l (upgrade <$> r))
 
 utxoReferences :: MultiEraUTxO (CardanoBlock crypto) -> [Text]
 utxoReferences =
