@@ -74,6 +74,7 @@ import Ogmios.Data.Json.Orphans
 import Ogmios.Data.Json.Prelude
     ( MetadataFormat (..)
     , at
+    , inefficientEncodingToValue
     )
 import Ogmios.Data.Protocol.TxMonitor
     ( AcquireMempool (..)
@@ -81,6 +82,7 @@ import Ogmios.Data.Protocol.TxMonitor
     , GenTxId
     , HasTransaction (..)
     , NextTransaction (..)
+    , NextTransactionFields (..)
     , ReleaseMempool (..)
     , SizeOfMempool (..)
     , SlotNo (..)
@@ -160,6 +162,7 @@ spec = parallel $ do
     context "TxMonitor" $ do
         parallel $ prop "Any sequence acquire/has/next/size is valid" prop_anySequenceValid
         parallel $ prop "Can and must query after acquiring" prop_queryAfterAcquiring
+        parallel $ prop "Replies with an internal error when a transaction fails to encode" prop_encoderFailure
   where
     prop_anySequenceValid :: Property
     prop_anySequenceValid =
@@ -173,7 +176,7 @@ spec = parallel $ do
                 & cover 1 (nextThenHas False msgs) "NextTransaction then HasTransaction"
             )
       where
-        p msgs = prop_inIOSim $ withTxMonitorClient $ \send receive -> do
+        p msgs = prop_inIOSim $ withTxMonitorClient (encodeTx (MetadataNoSchema, omitOptionalCbor)) $ \send receive -> do
             send $ acquireMempool Nothing
             expectRpcResponse isAcquireMempoolResponse receive Json.Null
             forM_ msgs  $ \(msg, mirror, predicate) -> do
@@ -211,21 +214,42 @@ spec = parallel $ do
                 & cover 1 ("SizeOfMempool" == showTxMonitorMessage arg) "SizeOfMempool"
             )
       where
-        p (msg, mirror, _) = prop_inIOSim $ withTxMonitorClient $ \send receive -> do
+        p (msg, mirror, _) = prop_inIOSim $ withTxMonitorClient (encodeTx (MetadataNoSchema, omitOptionalCbor)) $ \send receive -> do
             send msg
             expectRpcResponse isMustAcquireFirst receive (toJSON mirror)
+
+    prop_encoderFailure :: Property
+    prop_encoderFailure =
+        prop_inIOSim $ withTxMonitorClient (const $ error "cannot encode") $ \send receive -> do
+            -- The mempool can be empty. Acquire it again until it holds a transaction.
+            let nextUntilFailure = do
+                    send $ acquireMempool Nothing
+                    expectRpcResponse isAcquireMempoolResponse receive Json.Null
+                    send $ nextTxWithAllFields Nothing
+                    response <- receive
+                    if isNoTransaction response then do
+                        send $ releaseMempool Nothing
+                        expectRpcResponse isReleaseMempoolResponse receive Json.Null
+                        nextUntilFailure
+                    else
+                        expectRpcResponse isInternalError (pure response) Json.Null
+            nextUntilFailure
+            -- The client still answers.
+            send $ sizeOfMempool Nothing
+            expectRpcResponse isSizeOfMempoolResponse receive Json.Null
 
 type Protocol = LocalTxMonitor (GenTxId Block) (GenTx Block) SlotNo
 
 withTxMonitorClient
     :: (MonadCatch m, MonadEvaluate m, MonadOuroboros m)
-    => ((TxMonitorMessage Block -> m ()) ->  m Json -> m a)
+    => (GenTx Block -> Json)
+    -> ((TxMonitorMessage Block -> m ()) ->  m Json -> m a)
     -> StdGen
     -> m a
-withTxMonitorClient action seed = do
+withTxMonitorClient encodeTx' action seed = do
     (recvQ, sendQ) <- atomically $ (,) <$> newTQueue <*> newTQueue
     let opts = Rpc.defaultOptions
-    let innerCodecs = mkTxMonitorCodecs opts encodeGenTxId (encodeTx (MetadataNoSchema, omitOptionalCbor))
+    let innerCodecs = mkTxMonitorCodecs opts encodeGenTxId encodeTx'
     let client = mkTxMonitorClient (defaultWithInternalError (const $ return ()) opts) innerCodecs recvQ (atomically . writeTQueue sendQ) NodeToClientV_23
     let codec = codecs defaultSlotsPerEpoch nodeToClientV_Latest & cTxMonitorCodec
     withMockChannel (txMonitorMockPeer seed codec) $ \channel -> do
@@ -458,6 +482,16 @@ isNextTxResponse :: ResponsePredicate
 isNextTxResponse = ResponsePredicate $
     \v -> ("method" `at` v)  == Just (toJSON @Text "nextTransaction")
 
+nextTxWithAllFields :: Rpc.Mirror -> TxMonitorMessage Block
+nextTxWithAllFields mirror =
+    MsgNextTransaction (NextTransaction (Just NextTransactionAllFields)) (Rpc.Response method mirror)
+  where
+    method = Just "nextTransaction"
+
+isNoTransaction :: Json -> Bool
+isNoTransaction json =
+    (("result" `at` inefficientEncodingToValue json) >>= at "transaction") == Just Json.Null
+
 hasTx :: Rpc.Mirror -> Ledger.TxId -> TxMonitorMessage Block
 hasTx mirror tx =
     MsgHasTransaction (HasTransaction tx) (Rpc.Response method mirror)
@@ -504,6 +538,13 @@ isMustAcquireFirst = ResponsePredicate $
         e <- "error" `at` v
         code <- "code" `at` e
         guard (code == toJSON @Int 4000)
+
+isInternalError :: ResponsePredicate
+isInternalError = ResponsePredicate $
+    \v -> isJust $ do
+        e <- "error" `at` v
+        code <- "code" `at` e
+        guard (code == toJSON @Int (-32603))
 
 --
 -- Helpers

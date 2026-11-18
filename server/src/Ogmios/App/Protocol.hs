@@ -7,12 +7,16 @@
 module Ogmios.App.Protocol
     ( onUnmatchedMessage
     , defaultWithInternalError
+    , yieldEncoded
     ) where
 
 import Ogmios.Prelude
 
 import Cardano.Network.Protocol.NodeToClient
     ( SerializedTransaction
+    )
+import Control.Monad.Class.MonadThrow
+    ( MonadEvaluate (..)
     )
 import Data.List
     ( isInfixOf
@@ -34,6 +38,7 @@ import Ogmios.Data.Json
     ( FromJSON
     , Json
     , MultiEraDecoder
+    , jsonToByteString
     )
 import Ogmios.Data.Protocol.ChainSync
     ( FindIntersection
@@ -74,8 +79,10 @@ import Ouroboros.Network.Block
 import qualified Codec.Json.Rpc as Rpc
 import qualified Codec.Json.Rpc.Handler as Rpc
 import qualified Data.Aeson as Json
+import qualified Data.Aeson.Encoding as JsonEncoding
 import qualified Data.Aeson.KeyMap as Json
 import qualified Data.Aeson.Types as Json
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as T
 
 -- | A default handler for unmatched requests. This is an attempt to provide
@@ -203,3 +210,20 @@ defaultWithInternalError reportException opts continue yield toResponse = do
                 yield $ Rpc.ko opts $ Rpc.internalError mirror (displayException e)
                 reportException e
                 continue
+
+-- | Encode a response before sending it. If encoding fails, reply with an
+-- internal error instead of closing the connection. Errors while sending are
+-- not caught.
+yieldEncoded
+    :: (Monad m, MonadEvaluate m)
+    => (m (Maybe Json) -> (Json -> m ()) -> Rpc.ToResponse r -> m (Maybe Json) -> m (Maybe Json))
+        -- ^ A handler that turns exceptions into internal errors, like 'defaultWithInternalError'
+    -> (Json -> m ())
+        -- ^ An emitter for yielding JSON objects
+    -> Rpc.ToResponse r
+    -> Json
+    -> m ()
+yieldEncoded withInternalError yield toResponse json =
+    withInternalError (pure Nothing) yield toResponse
+        (Just . JsonEncoding.unsafeToEncoding . Builder.byteString <$> evaluate (jsonToByteString json))
+        >>= traverse_ yield

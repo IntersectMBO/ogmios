@@ -71,6 +71,9 @@ import Data.Type.Equality (
     testEquality,
     (:~:) (..),
  )
+import Ogmios.App.Protocol (
+    yieldEncoded,
+ )
 import Ogmios.Control.MonadClock (
     MonadClock (..),
  )
@@ -97,7 +100,6 @@ import Ogmios.Data.Json (
     Json,
     MultiEraDecoder (..),
     ToJSON,
-    jsonToByteString,
  )
 import Ogmios.Data.Ledger.ScriptFailure (
     EvaluateTransactionError (..),
@@ -188,8 +190,6 @@ import Type.Reflection (
 
 import qualified Codec.Json.Rpc as Rpc
 import qualified Data.Aeson as Json
-import qualified Data.Aeson.Encoding as JsonEncoding
-import qualified Data.ByteString.Builder as Builder
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Ouroboros.Consensus.HardFork.Combinator as HF
@@ -224,14 +224,6 @@ mkTxSubmissionClient tr defaultWithInternalError TxSubmissionCodecs{..} Executio
     await :: m (TxSubmissionMessage block)
     await = atomically (readTQueue queue)
 
-    -- | Encode eagerly, so that an encoder exception becomes an internal error reply instead of
-    -- surfacing in the websocket send. 'yield' stays outside the handler on purpose.
-    yieldEncoded :: Rpc.ToResponse r -> Json -> m ()
-    yieldEncoded toResponse json =
-        defaultWithInternalError (pure Nothing) yield toResponse
-            (Just . JsonEncoding.unsafeToEncoding . Builder.byteString <$> evaluate (jsonToByteString json))
-            >>= traverse_ yield
-
     isMostRecentEra era =
         T.toLower (toText era) == T.toLower (toText (eraName @(MostRecentEra block)))
 
@@ -254,7 +246,7 @@ mkTxSubmissionClient tr defaultWithInternalError TxSubmissionCodecs{..} Executio
                                 SubmitFail (ApplyTxErrWrongEra eraMismatch) | isMostRecentEra (ledgerEraName eraMismatch) -> do
                                     case upgradeGenTx transaction of
                                         Left hint -> do
-                                            yieldEncoded toResponse $
+                                            yieldEncoded defaultWithInternalError yield toResponse $
                                                 SubmitTransactionFailedToUpgrade hint
                                                     & toResponse
                                                     & encodeSubmitTransactionResponse
@@ -262,7 +254,7 @@ mkTxSubmissionClient tr defaultWithInternalError TxSubmissionCodecs{..} Executio
                                         Right upgradedTx ->
                                             pure $ SendMsgSubmitTx upgradedTx $ \result' -> do
                                                 clearMempoolOnSuccess result'
-                                                yieldEncoded toResponse $
+                                                yieldEncoded defaultWithInternalError yield toResponse $
                                                     mkSubmitTransactionResponse transaction result'
                                                         & toResponse
                                                         & encodeSubmitTransactionResponse
@@ -272,7 +264,7 @@ mkTxSubmissionClient tr defaultWithInternalError TxSubmissionCodecs{..} Executio
                                     -- mempool to ensure we always use the latest available
                                     -- mempool snapshot during evaluation.
                                     clearMempoolOnSuccess result
-                                    yieldEncoded toResponse $
+                                    yieldEncoded defaultWithInternalError yield toResponse $
                                         mkSubmitTransactionResponse transaction result
                                             & toResponse
                                             & encodeSubmitTransactionResponse
