@@ -64,6 +64,8 @@ math: true
 
 - Ogmios now exits with code 0 when it is stopped with `SIGINT` (Ctrl+C) or `SIGTERM`. Before, it exited with code 255 when it ran as PID 1, for example in a Docker container.
 
+- In the Dijkstra era, `evaluateTransaction` no longer ignores `additionalUtxo` when the mempool of the node holds transactions. Before, the evaluation then failed for inputs found only in `additionalUtxo`. `additionalUtxo` can now also hold Dijkstra outputs, such as native scripts with a `guard` clause.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added

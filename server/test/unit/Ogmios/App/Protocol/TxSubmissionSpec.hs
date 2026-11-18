@@ -19,6 +19,9 @@ import Ogmios.App.Protocol.TxSubmission
     ( SomeEvaluationInAnyEra (..)
     , newEvaluateTransactionResponse
     )
+import Ogmios.Data.EraTranslation
+    ( MultiEraUTxO (..)
+    )
 import Ogmios.Data.Ledger.ScriptFailure
     ( EvaluateTransactionError (..)
     )
@@ -29,6 +32,7 @@ import Ogmios.Data.Protocol.TxSubmission
     ( Tx
     , TxIn
     , UTxO (..)
+    , mergeUtxo
     )
 import Ogmios.Prelude hiding
     ( Era
@@ -69,6 +73,9 @@ spec = parallel $ do
         prop "resulting UTxO is the union of network <> user-defined" prop_merge
         prop "succeeds when fully identical" prop_coherent_intersection
         prop "fails on ambiguous intersection" prop_ambiguous_intersection
+
+    context "mergeUtxo" $ do
+        prop "keeps both sides when the eras differ" prop_merge_across_eras
 
 prop_merge :: Property
 prop_merge =
@@ -130,3 +137,25 @@ prop_ambiguous_intersection =
             )
             (UTxO utxoNetwork)
             (SomeEvaluationInAnyEra (UTxO utxoUser) tx)
+
+prop_merge_across_eras :: Property
+prop_merge_across_eras =
+    forAllBlind (arbitrary @(UTxO BabbageEra)) $ \babbage ->
+    forAllBlind (arbitrary @(UTxO ConwayEra)) $ \conway ->
+    forAllBlind (arbitrary @(UTxO DijkstraEra)) $ \dijkstra ->
+        conjoin
+            [ dijkstraKeys (mergeUtxo a b) === Just (keys a <> keys b)
+            | older <- [UTxOInBabbageEra babbage, UTxOInConwayEra conway]
+            , (a, b) <- [(older, UTxOInDijkstraEra dijkstra), (UTxOInDijkstraEra dijkstra, older)]
+            ]
+  where
+    keys :: MultiEraUTxO () -> Set TxIn
+    keys = \case
+        UTxOInBabbageEra (UTxO u) -> Map.keysSet u
+        UTxOInConwayEra (UTxO u) -> Map.keysSet u
+        UTxOInDijkstraEra (UTxO u) -> Map.keysSet u
+
+    dijkstraKeys :: MultiEraUTxO () -> Maybe (Set TxIn)
+    dijkstraKeys = \case
+        UTxOInDijkstraEra (UTxO u) -> Just (Map.keysSet u)
+        _ -> Nothing

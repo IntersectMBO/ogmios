@@ -193,6 +193,7 @@ import Ogmios.Data.Protocol.TxSubmission (
     EvaluateTransactionResponse,
     SubmitTransaction,
     SubmitTransactionResponse (..),
+    UTxO (..),
     _encodeEvaluateTransactionResponse,
     _encodeSubmitTransactionResponse,
  )
@@ -483,6 +484,16 @@ spec = do
                     fail "successfully decoded an invalid payload (as Conway Utxo)?"
                 Json.Success UTxOInDijkstraEra{} ->
                     fail "successfully decoded an invalid payload (as Dijkstra Utxo)?"
+
+        specify "Golden: Utxo_5.json" $ do
+            json <- decodeFileThrow "Utxo_5.json"
+            case Json.parse decodeUtxo json of
+                Json.Error e ->
+                    fail (show e)
+                Json.Success (UTxOInDijkstraEra (UTxO utxo)) ->
+                    Map.size utxo `shouldBe` 2
+                Json.Success _ ->
+                    fail "decoded a Utxo with a guard script in an era before Dijkstra?"
 
         specify "Golden: Script_Native_0.json" $ do
             json <- decodeFileThrow "Script_Native_0.json"
