@@ -1084,6 +1084,13 @@ spec = do
             (Just [aesonQQ|{ "era": "alonzo" }|])
             (parseQueryNetworkGenesisConfiguration genGenesisConfig)
 
+        validateNetworkQueryTagged
+            10
+            "genesisConfiguration"
+            (Just "Conway")
+            (Just [aesonQQ|{ "era": "conway" }|])
+            (parseQueryNetworkGenesisConfiguration genGenesisConfig)
+
         validateNetworkQuery
             5
             "startTime"
