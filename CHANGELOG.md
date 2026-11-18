@@ -62,6 +62,8 @@ math: true
 
 - Conway transactions now have a `treasury` field when they state the current treasury value or make a treasury donation. Before, the field was left out in exactly those cases, and every other Conway transaction had an empty `"treasury": {}`.
 
+- Ogmios now exits with code 0 when it is stopped with `SIGINT` (Ctrl+C) or `SIGTERM`. Before, it exited with code 255 when it ran as PID 1, for example in a Docker container.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added
