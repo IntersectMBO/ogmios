@@ -495,6 +495,16 @@ spec = do
                 Json.Success _ ->
                     fail "decoded a Utxo with a guard script in an era before Dijkstra?"
 
+        specify "Golden: Utxo_6.json" $ do
+            json <- decodeFileThrow "Utxo_6.json"
+            case Json.parse decodeUtxo json of
+                Json.Error e ->
+                    fail (show e)
+                Json.Success (UTxOInDijkstraEra (UTxO utxo)) ->
+                    Map.size utxo `shouldBe` 1
+                Json.Success _ ->
+                    fail "decoded a Utxo with a plutus:v4 script in an era before Dijkstra?"
+
         specify "Golden: Script_Native_0.json" $ do
             json <- decodeFileThrow "Script_Native_0.json"
             case traverse @[] (Json.parse (decodeScript @BabbageEra decodeNativeScript)) json of

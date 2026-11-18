@@ -2817,6 +2817,10 @@ decodeScript decodeNativeScriptInEra v =
                 bytes <- o .: "cbor"
                 plutus <- Ledger.Alonzo.mkBinaryPlutusScript Ledger.Plutus.PlutusV3 <$> decodePlutusScript Plutus.PlutusV3 lang bytes
                 maybe (fail "unable to instantiate PlutusScript from binary data") (pure . Ledger.Alonzo.PlutusScript) plutus
+            Just lang@"plutus:v4" -> do
+                bytes <- o .: "cbor"
+                plutus <- Ledger.Alonzo.mkBinaryPlutusScript Ledger.Plutus.PlutusV4 <$> decodePlutusScript Plutus.PlutusV4 lang bytes
+                maybe (fail "unable to instantiate PlutusScript from binary data") (pure . Ledger.Alonzo.PlutusScript) plutus
             _ ->
                 fail "missing or unknown script language."
       where

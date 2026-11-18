@@ -66,6 +66,8 @@ math: true
 
 - In the Dijkstra era, `evaluateTransaction` no longer ignores `additionalUtxo` when the mempool of the node holds transactions. Before, the evaluation then failed for inputs found only in `additionalUtxo`. `additionalUtxo` can now also hold Dijkstra outputs, such as native scripts with a `guard` clause.
 
+- `evaluateTransaction` now reads scripts with `"language": "plutus:v4"` in `additionalUtxo`. Before, it refused them.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added
