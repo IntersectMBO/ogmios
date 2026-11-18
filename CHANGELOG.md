@@ -30,6 +30,8 @@ math: true
 
 - **⚠️ BREAKING-CHANGE ⚠️**: Ogmios now requires node-to-client version 23, which cardano-node 10.7.1 and later offer. A cardano-node that does not offer it is refused at the handshake. Ogmios then stops with an error that lists the node-to-client versions the cardano-node offers and the versions Ogmios supports, instead of a raw handshake protocol error.
 
+- **⚠️ BREAKING-CHANGE ⚠️**: Allegra, Mary, Babbage, Conway and Dijkstra transactions no longer have an `outputs` field when they have no outputs, nor a `validityInterval` field when it has no bounds. The same goes for Dijkstra sub-transactions. The JSON schema no longer requires `outputs`.
+
 - The message of [`IncompleteWithdrawals`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3141/IncompleteWithdrawals) (`code=3141`) no longer says that every withdrawal must take the full account balance. That rule holds before the Dijkstra era, and in the Dijkstra era only for transactions in legacy mode.
 
 - In the Dijkstra era, the evaluation error for a pointer address says whether it was found in an input ("Found inputs locked by a (legacy) pointer address") or in an output ("Found outputs to a (legacy) pointer address"). It always said outputs before.
@@ -57,6 +59,8 @@ math: true
 - `submitTransaction` and `evaluateTransaction` now read transactions that use fields new in the Dijkstra era, such as sub-transactions. Before, they refused them as malformed. When a transaction cannot be read in any era, the error `data` now has a `dijkstra` entry too.
 
 - Connections now stay open while the mempool of the node holds a Dijkstra transaction. Before, they closed with no reply, for example right after a transaction was submitted in the Dijkstra era.
+
+- Conway transactions now have a `treasury` field when they state the current treasury value or make a treasury donation. Before, the field was left out in exactly those cases, and every other Conway transaction had an empty `"treasury": {}`.
 
 ### [6.14.0] - 2025-10-16
 

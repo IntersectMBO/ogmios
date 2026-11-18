@@ -612,7 +612,7 @@ export interface Transaction {
   collaterals?: TransactionOutputReference[];
   totalCollateral?: ValueAdaOnly;
   collateralReturn?: TransactionOutput;
-  outputs: TransactionOutput[];
+  outputs?: TransactionOutput[];
   certificates?: Certificate[];
   withdrawals?: Withdrawals;
   credits?: Credits;
@@ -1252,7 +1252,7 @@ export interface SubTransaction {
   id: DigestBlake2B256;
   inputs: TransactionOutputReference[];
   references?: TransactionOutputReference[];
-  outputs: TransactionOutput[];
+  outputs?: TransactionOutput[];
   certificates?: Certificate[];
   withdrawals?: Withdrawals;
   credits?: Credits;
