@@ -72,6 +72,8 @@ math: true
 
 - `queryNetwork/genesisConfiguration` for the Conway era now returns `plutusCostModels` (the Plutus V3 cost model) and `minFeeReferenceScripts` in `updatableParameters`. Before, both were missing.
 
+- `queryLedgerState/rewardAccountSummaries` now returns registered reward accounts that are not delegated to a stake pool, without a `stakePool` field. Before, it left them out.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added
