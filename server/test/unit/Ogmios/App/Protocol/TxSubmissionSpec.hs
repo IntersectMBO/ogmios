@@ -21,6 +21,7 @@ import Ogmios.App.Protocol.TxSubmission
     )
 import Ogmios.Data.EraTranslation
     ( MultiEraUTxO (..)
+    , Upgrade (..)
     )
 import Ogmios.Data.Ledger.ScriptFailure
     ( EvaluateTransactionError (..)
@@ -76,6 +77,7 @@ spec = parallel $ do
 
     context "mergeUtxo" $ do
         prop "keeps both sides when the eras differ" prop_merge_across_eras
+        prop "keeps the first argument on a shared key, upgraded" prop_merge_first_wins_across_eras
 
 prop_merge :: Property
 prop_merge =
@@ -158,4 +160,25 @@ prop_merge_across_eras =
     dijkstraKeys :: MultiEraUTxO () -> Maybe (Set TxIn)
     dijkstraKeys = \case
         UTxOInDijkstraEra (UTxO u) -> Just (Map.keysSet u)
+        _ -> Nothing
+
+prop_merge_first_wins_across_eras :: Property
+prop_merge_first_wins_across_eras =
+    forAllBlind arbitrary $ \txIn ->
+    forAllBlind (arbitrary @(BabbageTxOut BabbageEra)) $ \babbageOut ->
+    forAllBlind (arbitrary @(BabbageTxOut ConwayEra)) $ \conwayOut ->
+    forAllBlind (arbitrary @(BabbageTxOut DijkstraEra)) $ \dijkstraOut ->
+        let babbage = UTxOInBabbageEra (UTxO (Map.singleton txIn babbageOut))
+            conway = UTxOInConwayEra (UTxO (Map.singleton txIn conwayOut))
+            dijkstra = UTxOInDijkstraEra (UTxO (Map.singleton txIn dijkstraOut))
+         in conjoin
+            [ lookupDijkstra txIn (mergeUtxo babbage dijkstra) === Just (upgrade (upgrade babbageOut))
+            , lookupDijkstra txIn (mergeUtxo dijkstra babbage) === Just dijkstraOut
+            , lookupDijkstra txIn (mergeUtxo conway dijkstra) === Just (upgrade conwayOut)
+            , lookupDijkstra txIn (mergeUtxo dijkstra conway) === Just dijkstraOut
+            ]
+  where
+    lookupDijkstra :: TxIn -> MultiEraUTxO () -> Maybe (BabbageTxOut DijkstraEra)
+    lookupDijkstra k = \case
+        UTxOInDijkstraEra (UTxO u) -> Map.lookup k u
         _ -> Nothing
