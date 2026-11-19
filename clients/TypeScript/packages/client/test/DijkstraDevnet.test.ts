@@ -4,12 +4,22 @@ import { networkTip } from '../src/LedgerStateQuery'
 import { createMempoolMonitoringClient, MempoolMonitoringClient } from '../src/MempoolMonitoring'
 import { submitTransaction } from '../src/TransactionSubmission'
 import { Transaction } from '@cardano-ogmios/schema'
+import { execFileSync } from 'child_process'
 import { inspect } from 'util'
 
 // Set by scripts/dijkstra-devnet-test.sh. Without DIJKSTRA_TX_ID, these tests are skipped.
 const transactionCbor = process.env.DIJKSTRA_TX_CBOR
 const transactionId = process.env.DIJKSTRA_TX_ID
 const subTransactionId = process.env.DIJKSTRA_SUB_TX_ID
+const producerPid = process.env.DIJKSTRA_PRODUCER_PID
+
+// Pause a process with SIGSTOP, and wait until it is stopped.
+const pause = async (pid: number) => {
+  process.kill(pid, 'SIGSTOP')
+  while (!execFileSync('ps', ['-o', 'stat=', '-p', String(pid)]).toString().trim().startsWith('T')) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+}
 
 const describeOnDevnet = transactionId === undefined ? describe.skip : describe
 
@@ -21,12 +31,15 @@ describeOnDevnet('Dijkstra devnet', () => {
   let mempool: MempoolMonitoringClient
 
   beforeAll(async () => {
-    if (transactionCbor === undefined) {
-      throw new Error('DIJKSTRA_TX_CBOR is not set: run this test through scripts/dijkstra-devnet-test.sh')
+    if (transactionCbor === undefined || producerPid === undefined) {
+      throw new Error('DIJKSTRA_TX_CBOR or DIJKSTRA_PRODUCER_PID is not set: run this test through scripts/dijkstra-devnet-test.sh')
     }
     mempool = await createMempoolMonitoringClient(await dummyInteractionContext())
     const context = await dummyInteractionContext()
     try {
+      // Ogmios is connected to a relay. While the block producer is paused, no
+      // block can take the transaction out of the mempool before the snapshot.
+      await pause(Number(producerPid))
       submittedId = await submitTransaction(context, transactionCbor)
       await mempool.acquireMempool()
     } catch (error) {
@@ -34,6 +47,7 @@ describeOnDevnet('Dijkstra devnet', () => {
       throw new Error(`Submitting the transaction or taking the mempool snapshot failed: ${inspect(error, { depth: null })}`)
     } finally {
       context.socket.close()
+      process.kill(Number(producerPid), 'SIGCONT')
     }
   })
 
