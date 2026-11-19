@@ -491,7 +491,7 @@ spec = do
                 Json.Error e ->
                     fail (show e)
                 Json.Success (UTxOInDijkstraEra (UTxO utxo)) ->
-                    Map.size utxo `shouldBe` 2
+                    Map.size utxo `shouldBe` 5
                 Json.Success _ ->
                     fail "decoded a Utxo with a guard script in an era before Dijkstra?"
 

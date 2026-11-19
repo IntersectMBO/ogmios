@@ -2965,7 +2965,18 @@ decodeNativeScript ::
     (AllegraEraScript era) =>
     Json.Value ->
     Json.Parser (Ledger.NativeScript era)
-decodeNativeScript = Json.withObject "Script<Native>" $ \o -> do
+decodeNativeScript =
+    decodeNativeScriptWith decodeNativeScript
+
+-- | Decode a native script, and the scripts inside 'all', 'any' and 'some'
+-- with the given decoder.
+decodeNativeScriptWith ::
+    forall era.
+    (AllegraEraScript era) =>
+    (Json.Value -> Json.Parser (Ledger.NativeScript era)) ->
+    Json.Value ->
+    Json.Parser (Ledger.NativeScript era)
+decodeNativeScriptWith decodeInner = Json.withObject "Script<Native>" $ \o -> do
     clause <- o .: "clause"
     case clause :: Text of
         "signature" ->
@@ -2988,14 +2999,14 @@ decodeNativeScript = Json.withObject "Script<Native>" $ \o -> do
         pure $ mkRequireSignature @era (Ledger.KeyHash from)
     decodeAllOf o = do
         xs <- StrictSeq.fromList <$> (o .: "from")
-        mkRequireAllOf @era <$> traverse decodeNativeScript xs
+        mkRequireAllOf @era <$> traverse decodeInner xs
     decodeAnyOf o = do
         xs <- StrictSeq.fromList <$> (o .: "from")
-        mkRequireAnyOf @era <$> traverse decodeNativeScript xs
+        mkRequireAnyOf @era <$> traverse decodeInner xs
     decodeSomeOf o = do
         n <- o .: "atLeast"
         xs <- StrictSeq.fromList <$> (o .: "from")
-        mkRequireMOf @era n <$> traverse decodeNativeScript xs
+        mkRequireMOf @era n <$> traverse decodeInner xs
     decodeTimeExpire o =
         mkTimeExpire @era . SlotNo <$> (o .: "slot")
     decodeTimeStart o =
@@ -3014,7 +3025,7 @@ decodeDijkstraNativeScript value =
                     from <- o .: "from" >>= decodeStakingCredential decodeAsScriptHash
                     pure (Ledger.Dijkstra.RequireGuard (coerceKeyRole from))
                 _ ->
-                    decodeNativeScript value
+                    decodeNativeScriptWith decodeDijkstraNativeScript value
         )
         value
 
