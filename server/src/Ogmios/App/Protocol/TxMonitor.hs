@@ -160,7 +160,10 @@ mkTxMonitorClient defaultWithInternalError TxMonitorCodecs{..} queue yield _node
                                 NextTransactionResponseId (txId <$> mTx)
                             Just NextTransactionAllFields ->
                                 NextTransactionResponseTx mTx
-                    yieldEncoded defaultWithInternalError yield toResponse $ encodeNextTransactionResponse $ toResponse response
+                    -- On an encoding failure the client gets an internal error, and the
+                    -- next call returns the transaction after this one.
+                    yieldEncoded defaultWithInternalError yield toResponse $
+                        encodeNextTransactionResponse $ toResponse response
                     clientStAcquired
         MsgHasTransaction HasTransaction{id} toResponse ->
             defaultWithInternalError clientStAcquired yield toResponse $ do
