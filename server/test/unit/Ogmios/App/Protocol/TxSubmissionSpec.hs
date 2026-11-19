@@ -28,12 +28,25 @@ import Ogmios.Data.Ledger.ScriptFailure
     )
 import Cardano.Ledger.Core
     ( TopTx
+    , inputsTxBodyL
+    , mkBasicTx
+    , mkBasicTxBody
+    , outputsTxBodyL
+    , txIdTx
     )
 import Ogmios.Data.Protocol.TxSubmission
     ( Tx
-    , TxIn
+    , TxIn (..)
     , UTxO (..)
     , mergeUtxo
+    , utxoFromMempool
+    )
+import Ouroboros.Consensus.Cardano.Block
+    ( CardanoBlock
+    , GenTx (..)
+    )
+import Ouroboros.Consensus.Shelley.Ledger.Mempool
+    ( mkShelleyTx
     )
 import Ogmios.Prelude hiding
     ( Era
@@ -55,15 +68,18 @@ import Test.QuickCheck
     ( Arbitrary (..)
     , Property
     , conjoin
+    , counterexample
     , cover
     , forAllBlind
     , forAllShrinkBlind
+    , listOf1
     , suchThat
     , (===)
     , (==>)
     )
 
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 type Tx' = Tx TopTx BabbageEra
 type TxOut' = BabbageTxOut BabbageEra
@@ -78,6 +94,9 @@ spec = parallel $ do
     context "mergeUtxo" $ do
         prop "keeps both sides when the eras differ" prop_merge_across_eras
         prop "keeps the first argument on a shared key, upgraded" prop_merge_first_wins_across_eras
+
+    context "utxoFromMempool" $ do
+        prop "keeps earlier outputs when a Dijkstra transaction follows a Conway one" prop_mempool_across_eras
 
 prop_merge :: Property
 prop_merge =
@@ -182,3 +201,32 @@ prop_merge_first_wins_across_eras =
     lookupDijkstra k = \case
         UTxOInDijkstraEra (UTxO u) -> Map.lookup k u
         _ -> Nothing
+
+prop_mempool_across_eras :: Property
+prop_mempool_across_eras =
+    forAllBlind (listOf1 (arbitrary @(BabbageTxOut ConwayEra))) $ \conwayOuts ->
+    forAllBlind (arbitrary @(BabbageTxOut DijkstraEra)) $ \dijkstraOut ->
+        let conwayTx :: Tx TopTx ConwayEra
+            conwayTx = mkBasicTx (mkBasicTxBody & outputsTxBodyL .~ fromList conwayOuts)
+
+            spent :: TxIn
+            spent = TxIn (txIdTx conwayTx) minBound
+
+            dijkstraTx :: Tx TopTx DijkstraEra
+            dijkstraTx = mkBasicTx $ mkBasicTxBody
+                & inputsTxBodyL .~ Set.singleton spent
+                & outputsTxBodyL .~ fromList [dijkstraOut]
+
+            mempool :: [GenTx (CardanoBlock StandardCrypto)]
+            mempool = [GenTxConway (mkShelleyTx conwayTx), GenTxDijkstra (mkShelleyTx dijkstraTx)]
+
+            expected :: Map TxIn (BabbageTxOut DijkstraEra)
+            expected = Map.fromList $
+                [ (TxIn (txIdTx conwayTx) ix, upgrade out)
+                | (ix, out) <- zip [minBound ..] conwayOuts
+                , ix /= minBound
+                ]
+                <> [ (TxIn (txIdTx dijkstraTx) minBound, dijkstraOut) ]
+         in case utxoFromMempool mempool of
+                UTxOInDijkstraEra (UTxO u) -> u === expected
+                _ -> counterexample "expected a Dijkstra UTxO" False
