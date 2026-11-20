@@ -111,11 +111,11 @@ export type None = null;
  */
 export type Network = "mainnet" | "testnet";
 export type UInt32 = number;
+export type UInt16 = number;
 export type Nonce = Neutral | DigestBlake2B256;
 export type Neutral = "neutral";
 export type Int64 = number;
 export type CostModel = Int64[];
-export type UInt16 = number;
 export type Metadatum = MetadatumNoSchema | MetadatumDetailedSchema;
 export type MetadatumNoSchema = IntegerNoSchema | StringNoSchema | ArrayNoSchema | ObjectNoSchema;
 export type IntegerNoSchema = bigint;
@@ -981,6 +981,37 @@ export interface ProposedProtocolParameters {
   maxReferenceScriptsSizePerTransaction?: {
     bytes: UInt64;
   };
+  maxStakePoolPledgeLeverage?: Ratio | null;
+  minStakePoolMargin?: Ratio;
+  leiosAnnouncementPeriodLength?: {
+    milliseconds: UInt64;
+  };
+  leiosVotePeriodLength?: {
+    milliseconds: UInt64;
+  };
+  leiosDiffusionPeriodLength?: {
+    milliseconds: UInt64;
+  };
+  leiosCommitteeSize?: UInt16;
+  leiosQuorumStakeThreshold?: Ratio;
+  maxEndorserBlockReferencesSize?: {
+    bytes: UInt64;
+  };
+  maxEndorserBlockTransactionsSize?: {
+    bytes: UInt64;
+  };
+  maxExecutionUnitsPerEndorserBlock?: ExecutionUnits;
+  maxReferenceScriptsSizePerEndorserBlock?: {
+    bytes: UInt64;
+  };
+  perasMinCandidateBlockAge?: UInt32;
+  perasHealingFactor?: Ratio;
+  perasCertificateBoost?: UInt16;
+  perasTargetCommitteeSize?: UInt16;
+  perasBootstrapRound?: UInt32 | null;
+  perasQuorumThresholdSafetyMargin?: Ratio;
+  referenceInputsCostPerMultiAssetPolicy?: ValueAdaOnly;
+  referenceInputsCostPerDatumByte?: UInt64;
   maxValueSize?: {
     bytes: UInt64;
   };
@@ -1010,16 +1041,16 @@ export interface ProposedProtocolParameters {
   delegateRepresentativeMaxIdleTime?: Epoch;
   version?: ProtocolVersion;
 }
+export interface ExecutionUnits {
+  memory: UInt64;
+  cpu: UInt64;
+}
 export interface CostModels {
   [k: string]: CostModel;
 }
 export interface ScriptExecutionPrices {
   memory: Ratio;
   cpu: Ratio;
-}
-export interface ExecutionUnits {
-  memory: UInt64;
-  cpu: UInt64;
 }
 export interface StakePoolVotingThresholds {
   noConfidence: Ratio;
@@ -3062,6 +3093,37 @@ export interface ProtocolParameters {
   maxReferenceScriptsSizePerTransaction?: {
     bytes: UInt64;
   };
+  maxStakePoolPledgeLeverage?: Ratio | null;
+  minStakePoolMargin?: Ratio;
+  leiosAnnouncementPeriodLength?: {
+    milliseconds: UInt64;
+  };
+  leiosVotePeriodLength?: {
+    milliseconds: UInt64;
+  };
+  leiosDiffusionPeriodLength?: {
+    milliseconds: UInt64;
+  };
+  leiosCommitteeSize?: UInt16;
+  leiosQuorumStakeThreshold?: Ratio;
+  maxEndorserBlockReferencesSize?: {
+    bytes: UInt64;
+  };
+  maxEndorserBlockTransactionsSize?: {
+    bytes: UInt64;
+  };
+  maxExecutionUnitsPerEndorserBlock?: ExecutionUnits;
+  maxReferenceScriptsSizePerEndorserBlock?: {
+    bytes: UInt64;
+  };
+  perasMinCandidateBlockAge?: UInt32;
+  perasHealingFactor?: Ratio;
+  perasCertificateBoost?: UInt16;
+  perasTargetCommitteeSize?: UInt16;
+  perasBootstrapRound?: UInt32 | null;
+  perasQuorumThresholdSafetyMargin?: Ratio;
+  referenceInputsCostPerMultiAssetPolicy?: ValueAdaOnly;
+  referenceInputsCostPerDatumByte?: UInt64;
   stakePoolVotingThresholds?: StakePoolVotingThresholds;
   constitutionalCommitteeMinSize?: UInt16;
   constitutionalCommitteeMaxTermLength?: UInt64;

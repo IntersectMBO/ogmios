@@ -2051,6 +2051,15 @@
       }
     }
 
+  , "NumberOfMilliseconds":
+    { "type": "object"
+    , "additionalProperties": false
+    , "required": [ "milliseconds" ]
+    , "properties":
+      { "milliseconds": { "$ref": "cardano.json#/definitions/UInt64" }
+      }
+    }
+
   , "OperationalCertificate":
     { "title": "OperationalCertificate"
     , "type": "object"
@@ -2254,6 +2263,35 @@
       , "maxReferenceScriptsSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
       , "maxReferenceScriptsSizePerBlock": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
       , "maxReferenceScriptsSizePerTransaction": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "maxStakePoolPledgeLeverage":
+        { "oneOf":
+          [ { "$ref": "cardano.json#/definitions/Ratio" }
+          , { "type": "null" }
+          ]
+        }
+      , "minStakePoolMargin": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "leiosAnnouncementPeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+      , "leiosVotePeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+      , "leiosDiffusionPeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+      , "leiosCommitteeSize": { "$ref": "cardano.json#/definitions/UInt16" }
+      , "leiosQuorumStakeThreshold": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "maxEndorserBlockReferencesSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "maxEndorserBlockTransactionsSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "maxExecutionUnitsPerEndorserBlock": { "$ref": "cardano.json#/definitions/ExecutionUnits" }
+      , "maxReferenceScriptsSizePerEndorserBlock": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "perasMinCandidateBlockAge": { "$ref": "cardano.json#/definitions/UInt32" }
+      , "perasHealingFactor": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "perasCertificateBoost": { "$ref": "cardano.json#/definitions/UInt16" }
+      , "perasTargetCommitteeSize": { "$ref": "cardano.json#/definitions/UInt16" }
+      , "perasBootstrapRound":
+        { "oneOf":
+          [ { "$ref": "cardano.json#/definitions/UInt32" }
+          , { "type": "null" }
+          ]
+        }
+      , "perasQuorumThresholdSafetyMargin": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "referenceInputsCostPerMultiAssetPolicy": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+      , "referenceInputsCostPerDatumByte": { "$ref": "cardano.json#/definitions/UInt64" }
       , "maxValueSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
       , "extraEntropy": { "$ref": "cardano.json#/definitions/Nonce" }
       , "stakeCredentialDeposit": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
@@ -2333,6 +2371,35 @@
       , "maxReferenceScriptsSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
       , "maxReferenceScriptsSizePerBlock": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
       , "maxReferenceScriptsSizePerTransaction": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "maxStakePoolPledgeLeverage":
+        { "oneOf":
+          [ { "$ref": "cardano.json#/definitions/Ratio" }
+          , { "type": "null" }
+          ]
+        }
+      , "minStakePoolMargin": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "leiosAnnouncementPeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+      , "leiosVotePeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+      , "leiosDiffusionPeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+      , "leiosCommitteeSize": { "$ref": "cardano.json#/definitions/UInt16" }
+      , "leiosQuorumStakeThreshold": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "maxEndorserBlockReferencesSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "maxEndorserBlockTransactionsSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "maxExecutionUnitsPerEndorserBlock": { "$ref": "cardano.json#/definitions/ExecutionUnits" }
+      , "maxReferenceScriptsSizePerEndorserBlock": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+      , "perasMinCandidateBlockAge": { "$ref": "cardano.json#/definitions/UInt32" }
+      , "perasHealingFactor": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "perasCertificateBoost": { "$ref": "cardano.json#/definitions/UInt16" }
+      , "perasTargetCommitteeSize": { "$ref": "cardano.json#/definitions/UInt16" }
+      , "perasBootstrapRound":
+        { "oneOf":
+          [ { "$ref": "cardano.json#/definitions/UInt32" }
+          , { "type": "null" }
+          ]
+        }
+      , "perasQuorumThresholdSafetyMargin": { "$ref": "cardano.json#/definitions/Ratio" }
+      , "referenceInputsCostPerMultiAssetPolicy": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+      , "referenceInputsCostPerDatumByte": { "$ref": "cardano.json#/definitions/UInt64" }
       , "stakePoolVotingThresholds": { "$ref": "cardano.json#/definitions/StakePoolVotingThresholds" }
       , "constitutionalCommitteeMinSize": { "$ref": "cardano.json#/definitions/UInt16" }
       , "constitutionalCommitteeMaxTermLength": { "$ref": "cardano.json#/definitions/UInt64" }

@@ -44,6 +44,7 @@ import Cardano.Ledger.BaseTypes (
     BoundedRational (..),
     Exclusive (..),
     Inclusive (..),
+    Milliseconds32 (..),
     NonNegativeInterval,
     PositiveInterval,
     ProtVer,
@@ -56,6 +57,9 @@ import Cardano.Ledger.Conway.PParams (
  )
 import Cardano.Ledger.HKD (
     HKDFunctor (..),
+ )
+import Cardano.Slotting.Slot (
+    SlotInterval (..),
  )
 
 import qualified Cardano.Ledger.HKD as Ledger
@@ -813,6 +817,84 @@ encodePParamsHKD encode pure_ x =
             "maxReferenceScriptsSizePerTransaction"
             (encodeSingleton "bytes" . encodeWord32)
             (unTHKD (Di.dppMaxRefScriptSizePerTx x))
+        <> encode
+            "maxStakePoolPledgeLeverage"
+            (encodeStrictMaybe encodeNonNegativeInterval . Ledger.unMaxPledgeLeverage)
+            (unTHKD (Di.dppMaxPledgeLeverage x))
+        <> encode
+            "minStakePoolMargin"
+            encodeUnitInterval
+            (unTHKD (Di.dppMinPoolMargin x))
+        <> encode
+            "leiosAnnouncementPeriodLength"
+            (encodeSingleton "milliseconds" . encodeWord32 . unMilliseconds32)
+            (unTHKD (Di.dppLeiosAnnouncementPeriodLength x))
+        <> encode
+            "leiosVotePeriodLength"
+            (encodeSingleton "milliseconds" . encodeWord32 . unMilliseconds32)
+            (unTHKD (Di.dppLeiosVotePeriodLength x))
+        <> encode
+            "leiosDiffusionPeriodLength"
+            (encodeSingleton "milliseconds" . encodeWord32 . unMilliseconds32)
+            (unTHKD (Di.dppLeiosDiffusionPeriodLength x))
+        <> encode
+            "leiosCommitteeSize"
+            encodeWord16
+            (unTHKD (Di.dppLeiosCommitteeSize x))
+        <> encode
+            "leiosQuorumStakeThreshold"
+            encodeUnitInterval
+            (unTHKD (Di.dppLeiosQuorumStakeThreshold x))
+        <> encode
+            "maxEndorserBlockReferencesSize"
+            (encodeSingleton "bytes" . encodeWord32)
+            (unTHKD (Di.dppMaxEndorserBlockReferencesSize x))
+        <> encode
+            "maxEndorserBlockTransactionsSize"
+            (encodeSingleton "bytes" . encodeWord32)
+            (unTHKD (Di.dppMaxEndorserBlockTxsSize x))
+        <> encode
+            "maxExecutionUnitsPerEndorserBlock"
+            (Alonzo.encodeExUnits . Al.unOrdExUnits)
+            (unTHKD (Di.dppMaxEndorserBlockExUnits x))
+        <> encode
+            "maxReferenceScriptsSizePerEndorserBlock"
+            (encodeSingleton "bytes" . encodeWord32)
+            (unTHKD (Di.dppMaxRefScriptSizePerEndorserBlock x))
+        <> encode
+            "perasMinCandidateBlockAge"
+            (encodeWord32 . unSlotInterval)
+            (unTHKD (Di.dppPerasMinCandidateBlockAge x))
+        <> encode
+            "perasHealingFactor"
+            ( \(factor :: PositiveInterval) ->
+                encodeRational (unboundRational factor)
+            )
+            (unTHKD (Di.dppPerasHealingFactor x))
+        <> encode
+            "perasCertificateBoost"
+            encodeWord16
+            (unTHKD (Di.dppPerasCertBoost x))
+        <> encode
+            "perasTargetCommitteeSize"
+            encodeWord16
+            (unTHKD (Di.dppPerasTargetCommitteeSize x))
+        <> encode
+            "perasBootstrapRound"
+            (encodeStrictMaybe encodeWord32)
+            (unTHKD (Di.dppPerasBootstrapRound x))
+        <> encode
+            "perasQuorumThresholdSafetyMargin"
+            encodeUnitInterval
+            (unTHKD (Di.dppPerasQuorumThresholdSafetyMargin x))
+        <> encode
+            "referenceInputsCostPerMultiAssetPolicy"
+            encodeCoin
+            (unTHKD (Di.dppRefInputsCostPerMultiAssetPolicy x))
+        <> encode
+            "referenceInputsCostPerDatumByte"
+            (encodeInteger . unCoin . fromCompact . Ba.unCoinPerByte)
+            (unTHKD (Di.dppRefInputsCostPerDatumByte x))
         & encodeObject
 
 encodeProposalProcedure ::
