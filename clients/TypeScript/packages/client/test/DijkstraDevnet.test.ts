@@ -1,6 +1,6 @@
 import { dummyInteractionContext } from './helpers'
 import { createChainSynchronizationClient } from '../src/ChainSynchronization'
-import { networkTip } from '../src/LedgerStateQuery'
+import { networkTip, protocolParameters } from '../src/LedgerStateQuery'
 import { createMempoolMonitoringClient, MempoolMonitoringClient } from '../src/MempoolMonitoring'
 import { submitTransaction } from '../src/TransactionSubmission'
 import { Transaction } from '@cardano-ogmios/schema'
@@ -118,6 +118,16 @@ describeOnDevnet('Dijkstra devnet', () => {
       expect(tx.subTransactions?.map(subTx => subTx.id)).toEqual([subTransactionId])
     } finally {
       await client.shutdown()
+    }
+  })
+
+  it('reads the protocol parameters', async () => {
+    const context = await dummyInteractionContext()
+    try {
+      // Only the Dijkstra era has maxReferenceScriptsSizePerTransaction.
+      await expect(protocolParameters(context)).resolves.toHaveProperty('maxReferenceScriptsSizePerTransaction')
+    } finally {
+      context.socket.close()
     }
   })
 })

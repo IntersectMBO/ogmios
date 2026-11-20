@@ -74,6 +74,8 @@ math: true
 
 - `queryLedgerState/rewardAccountSummaries` now returns registered reward accounts that are not delegated to a stake pool, without a `stakePool` field. Before, it left them out.
 
+- `queryLedgerState/protocolParameters` now returns the protocol parameters in the Dijkstra era. Before, it failed there with error `2002` (query unavailable in the current era). In the Dijkstra era, the result has `maxReferenceScriptsSizePerBlock` and `maxReferenceScriptsSizePerTransaction` instead of `maxReferenceScriptsSize`.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added

@@ -808,7 +808,7 @@ spec = do
 
         validateLedgerStateQuery
             30
-            (SomeShelleyEra ShelleyBasedEraConway)
+            (SomeShelleyEra ShelleyBasedEraDijkstra)
             "protocolParameters"
             Nothing
             (parseQueryLedgerProtocolParameters genPParamsResult)

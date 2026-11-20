@@ -735,7 +735,7 @@ genPParamsResult
     -> Gen (QueryResult crypto (Ledger.PParams era))
 genPParamsResult _ _ =
     maybe (error "genPParamsResult: unsupported era") identity
-        (genShelley <|> genAllegra <|> genMary <|> genAlonzo <|> genBabbage <|> genConway)
+        (genShelley <|> genAllegra <|> genMary <|> genAlonzo <|> genBabbage <|> genConway <|> genDijkstra)
   where
     genShelley =
         case testEquality (typeRep @era) (typeRep @ShelleyEra) of
@@ -784,6 +784,15 @@ genPParamsResult _ _ =
                 Nothing
     genConway =
         case testEquality (typeRep @era) (typeRep @ConwayEra) of
+            Just Refl{} ->
+                Just $ frequency
+                    [ (1, Left <$> genMismatchEraInfo)
+                    , (10, Right <$> arbitrary)
+                    ]
+            Nothing ->
+                Nothing
+    genDijkstra =
+        case testEquality (typeRep @era) (typeRep @DijkstraEra) of
             Just Refl{} ->
                 Just $ frequency
                     [ (1, Left <$> genMismatchEraInfo)
