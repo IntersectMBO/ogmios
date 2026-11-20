@@ -957,9 +957,9 @@ export interface ProposedProtocolParameters {
   minFeeCoefficient?: UInt64;
   minFeeConstant?: ValueAdaOnly;
   minFeeReferenceScripts?: {
-    range: UInt32;
-    base: number;
-    multiplier: number;
+    range?: UInt32;
+    base?: number;
+    multiplier?: number;
   };
   minUtxoDepositCoefficient?: UInt64;
   minUtxoDepositConstant?: ValueAdaOnly;

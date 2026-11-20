@@ -2240,7 +2240,6 @@
       , "minFeeReferenceScripts":
         { "type": "object"
         , "additionalProperties": false
-        , "required": [ "range", "base", "multiplier" ]
         , "properties":
           { "range": { "$ref": "cardano.json#/definitions/UInt32" }
           , "base": { "type": "number" }

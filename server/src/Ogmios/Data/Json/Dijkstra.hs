@@ -45,6 +45,7 @@ import Cardano.Ledger.BaseTypes (
     Exclusive (..),
     Inclusive (..),
     NonNegativeInterval,
+    PositiveInterval,
     ProtVer,
  )
 import Cardano.Ledger.Compactible (
@@ -665,19 +666,29 @@ encodePParamsHKD encode pure_ x =
             "minFeeConstant"
             (encodeCoin . fromCompact)
             (unTHKD (Di.dppTxFeeFixed x))
-        <> encode
-            "minFeeReferenceScripts"
-            ( \(base :: NonNegativeInterval) ->
-                encodeObject
-                    ( "base"
-                        .= encodeDouble (fromRational (unboundRational base))
-                        <> "range"
-                        .= encodeWord32 25600
-                        <> "multiplier"
-                        .= encodeDouble 1.2
+        <> "minFeeReferenceScripts"
+        .=? OmitWhen
+            (== encodeObject mempty)
+            identity
+            ( encodeObject
+                ( encode
+                    "base"
+                    ( \(base :: NonNegativeInterval) ->
+                        encodeDouble (fromRational (unboundRational base))
                     )
+                    (unTHKD (Di.dppMinFeeRefScriptCostPerByte x))
+                    <> encode
+                        "range"
+                        (encodeNonZero encodeWord32)
+                        (unTHKD (Di.dppRefScriptCostStride x))
+                    <> encode
+                        "multiplier"
+                        ( \(multiplier :: PositiveInterval) ->
+                            encodeDouble (fromRational (unboundRational multiplier))
+                        )
+                        (unTHKD (Di.dppRefScriptCostMultiplier x))
+                )
             )
-            (unTHKD (Di.dppMinFeeRefScriptCostPerByte x))
         <> encode
             "maxBlockBodySize"
             (encodeSingleton "bytes" . encodeWord32)

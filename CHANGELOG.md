@@ -38,6 +38,8 @@ math: true
 
 - Bump dependencies to the latest cardano-ledger, ouroboros-consensus and ouroboros-network releases.
 
+- In the Dijkstra era, the `minFeeReferenceScripts` of a governance proposal only has the parts that the proposal changes: `base`, `range` or `multiplier`. The JSON schema no longer requires all three there.
+
 #### Fixed
 
 - A failure while encoding the response of `submitTransaction` or `nextTransaction` now returns a JSON-RPC internal error to the client. Before, the websocket connection was closed with no reply.
@@ -74,7 +76,7 @@ math: true
 
 - `queryLedgerState/rewardAccountSummaries` now returns registered reward accounts that are not delegated to a stake pool, without a `stakePool` field. Before, it left them out.
 
-- `queryLedgerState/protocolParameters` now returns the protocol parameters in the Dijkstra era. Before, it failed there with error `2002` (query unavailable in the current era). In the Dijkstra era, the result has `maxReferenceScriptsSizePerBlock` and `maxReferenceScriptsSizePerTransaction` instead of `maxReferenceScriptsSize`.
+- `queryLedgerState/protocolParameters` now returns the protocol parameters in the Dijkstra era. Before, it failed there with error `2002` (query unavailable in the current era). In the Dijkstra era, the result has `maxReferenceScriptsSizePerBlock` and `maxReferenceScriptsSizePerTransaction` instead of `maxReferenceScriptsSize`. In the Dijkstra era, `minFeeReferenceScripts.range` and `minFeeReferenceScripts.multiplier` are protocol parameters, so they can change. Before Dijkstra, they are always 25600 and 1.2.
 
 ### [6.14.0] - 2025-10-16
 
