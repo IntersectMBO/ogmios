@@ -1364,6 +1364,8 @@
           , "delegateRepresentativeVotingThresholds"
           , "delegateRepresentativeDeposit"
           , "delegateRepresentativeMaxIdleTime"
+          , "plutusCostModels"
+          , "minFeeReferenceScripts"
           ]
         , "properties":
           { "stakePoolVotingThresholds": { "$ref": "cardano.json#/definitions/StakePoolVotingThresholds" }
@@ -1374,6 +1376,8 @@
           , "delegateRepresentativeVotingThresholds": { "$ref": "cardano.json#/definitions/DelegateRepresentativeVotingThresholds" }
           , "delegateRepresentativeDeposit": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
           , "delegateRepresentativeMaxIdleTime": { "$ref": "cardano.json#/definitions/Epoch" }
+          , "plutusCostModels": { "$ref": "cardano.json#/definitions/CostModels" }
+          , "minFeeReferenceScripts": { "$ref": "cardano.json#/definitions/MinFeeReferenceScripts" }
           }
         }
       }
@@ -1985,6 +1989,26 @@
       }
     }
 
+  , "MinFeeReferenceScripts":
+    { "title": "MinFeeReferenceScripts"
+    , "type": "object"
+    , "additionalProperties": false
+    , "required": [ "range", "base", "multiplier" ]
+    , "properties":
+      { "range":
+        { "$ref": "cardano.json#/definitions/UInt32"
+        }
+      , "base":
+        { "type": "number"
+        , "description": "The base cost for the tier-price calculation."
+        }
+      , "multiplier":
+        { "type": "number"
+        , "description": "The multiplier increasing the cost of each tier."
+        }
+      }
+    }
+
   , "Network":
     { "title": "Network"
     , "type": "string"
@@ -2284,24 +2308,7 @@
     , "properties":
       { "minFeeCoefficient": { "$ref": "cardano.json#/definitions/UInt64" }
       , "minFeeConstant": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
-      , "minFeeReferenceScripts":
-        { "type": "object"
-        , "additionalProperties": false
-        , "required": [ "range", "base", "multiplier" ]
-        , "properties":
-          { "range":
-            { "$ref": "cardano.json#/definitions/UInt32"
-            }
-          , "base":
-            { "type": "number"
-            , "description": "The base cost for the tier-price calculation."
-            }
-          , "multiplier":
-            { "type": "number"
-            , "description": "The multiplier increasing the cost of each tier."
-            }
-          }
-        }
+      , "minFeeReferenceScripts": { "$ref": "cardano.json#/definitions/MinFeeReferenceScripts" }
       , "minUtxoDepositCoefficient": { "$ref": "cardano.json#/definitions/UInt64" }
       , "minUtxoDepositConstant": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
       , "maxBlockBodySize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }

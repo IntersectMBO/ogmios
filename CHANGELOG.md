@@ -64,6 +64,16 @@ math: true
 
 - Ogmios now exits with code 0 when it is stopped with `SIGINT` (Ctrl+C) or `SIGTERM`. Before, it exited with code 255 when it ran as PID 1, for example in a Docker container.
 
+- In the Dijkstra era, `evaluateTransaction` no longer ignores `additionalUtxo` when the mempool of the node holds transactions. Before, the evaluation then failed for inputs found only in `additionalUtxo`. `additionalUtxo` can now also hold Dijkstra outputs, such as native scripts with a `guard` clause.
+
+- `evaluateTransaction` now reads scripts with `"language": "plutus:v4"` in `additionalUtxo`. Before, it refused them.
+
+- `evaluateTransaction` now uses the outputs given in `additionalUtxo` over the outputs that transactions in the mempool create, when both have the same output reference. Before, the mempool outputs won.
+
+- `queryNetwork/genesisConfiguration` for the Conway era now returns `plutusCostModels` (the Plutus V3 cost model) and `minFeeReferenceScripts` in `updatableParameters`. Before, both were missing.
+
+- `queryLedgerState/rewardAccountSummaries` now returns registered reward accounts that are not delegated to a stake pool, without a `stakePool` field. Before, it left them out.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added

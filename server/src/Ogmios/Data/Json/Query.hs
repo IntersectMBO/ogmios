@@ -57,7 +57,9 @@ module Ogmios.Data.Json.Query (
     decodeDRepCredential,
     decodeStakingCredential,
     decodeDatumHash,
+    decodeDijkstraNativeScript,
     decodeHash,
+    decodeNativeScript,
     decodeOneEraHash,
     decodePoint,
     decodePolicyId,
@@ -318,6 +320,7 @@ import qualified Cardano.Ledger.Conway.Governance as Ledger.Conway
 import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.Credential as Ledger
 import qualified Cardano.Ledger.DRep as Ledger
+import qualified Cardano.Ledger.Dijkstra.Scripts as Ledger.Dijkstra
 import qualified Cardano.Ledger.Hashes as Ledger
 import qualified Cardano.Ledger.Mary.Value as Ledger.Mary
 import qualified Cardano.Ledger.Plutus.Data as Ledger.Plutus
@@ -1782,8 +1785,12 @@ parseQueryLedgerRewardAccountSummaries genResult =
                 (Map.zipWithMatched $ \_ drep mk -> mk (SJust drep))
                 dreps
                 ( Map.merge
+                    -- pool, but no reward account; impossible, a delegation requires a registration
                     Map.dropMissing
-                    Map.dropMissing
+                    -- reward account, but no pool: registered without a pool delegation
+                    (Map.mapMissing $ \_ rewards drep ->
+                        RewardAccountSummary SNothing drep rewards
+                    )
                     ( Map.zipWithMatched
                         ( \_ poolDelegate rewards drep ->
                             RewardAccountSummary (SJust poolDelegate) drep rewards
@@ -2772,9 +2779,10 @@ decodeScript ::
     ( AlonzoEraScript era
     , Ledger.Script era ~ Ledger.Alonzo.AlonzoScript era
     ) =>
+    (Json.Value -> Json.Parser (Ledger.NativeScript era)) ->
     Json.Value ->
     Json.Parser (Ledger.Script era)
-decodeScript v =
+decodeScript decodeNativeScriptInEra v =
     Json.withText "Script::CBOR" decodeFromBase16Cbor v
         <|> Json.withObject "Script::JSON" decodeFromWrappedJson v
   where
@@ -2798,7 +2806,7 @@ decodeScript v =
                             Left (_ :: Text) ->
                                 fail "couldn't decode native script"
                     (_, Just script) ->
-                        Ledger.Alonzo.NativeScript <$> decodeNativeScript script
+                        Ledger.Alonzo.NativeScript <$> decodeNativeScriptInEra script
                     (_, _) ->
                         fail "missing field 'cbor' or 'json' to decode native script"
             Just lang@"plutus:v1" -> do
@@ -2812,6 +2820,10 @@ decodeScript v =
             Just lang@"plutus:v3" -> do
                 bytes <- o .: "cbor"
                 plutus <- Ledger.Alonzo.mkBinaryPlutusScript Ledger.Plutus.PlutusV3 <$> decodePlutusScript Plutus.PlutusV3 lang bytes
+                maybe (fail "unable to instantiate PlutusScript from binary data") (pure . Ledger.Alonzo.PlutusScript) plutus
+            Just lang@"plutus:v4" -> do
+                bytes <- o .: "cbor"
+                plutus <- Ledger.Alonzo.mkBinaryPlutusScript Ledger.Plutus.PlutusV4 <$> decodePlutusScript Plutus.PlutusV4 lang bytes
                 maybe (fail "unable to instantiate PlutusScript from binary data") (pure . Ledger.Alonzo.PlutusScript) plutus
             _ ->
                 fail "missing or unknown script language."
@@ -2957,7 +2969,18 @@ decodeNativeScript ::
     (AllegraEraScript era) =>
     Json.Value ->
     Json.Parser (Ledger.NativeScript era)
-decodeNativeScript = Json.withObject "Script<Native>" $ \o -> do
+decodeNativeScript =
+    decodeNativeScriptWith decodeNativeScript
+
+-- | Decode a native script, and the scripts inside 'all', 'any' and 'some'
+-- with the given decoder.
+decodeNativeScriptWith ::
+    forall era.
+    (AllegraEraScript era) =>
+    (Json.Value -> Json.Parser (Ledger.NativeScript era)) ->
+    Json.Value ->
+    Json.Parser (Ledger.NativeScript era)
+decodeNativeScriptWith decodeInner = Json.withObject "Script<Native>" $ \o -> do
     clause <- o .: "clause"
     case clause :: Text of
         "signature" ->
@@ -2980,18 +3003,35 @@ decodeNativeScript = Json.withObject "Script<Native>" $ \o -> do
         pure $ mkRequireSignature @era (Ledger.KeyHash from)
     decodeAllOf o = do
         xs <- StrictSeq.fromList <$> (o .: "from")
-        mkRequireAllOf @era <$> traverse decodeNativeScript xs
+        mkRequireAllOf @era <$> traverse decodeInner xs
     decodeAnyOf o = do
         xs <- StrictSeq.fromList <$> (o .: "from")
-        mkRequireAnyOf @era <$> traverse decodeNativeScript xs
+        mkRequireAnyOf @era <$> traverse decodeInner xs
     decodeSomeOf o = do
         n <- o .: "atLeast"
         xs <- StrictSeq.fromList <$> (o .: "from")
-        mkRequireMOf @era n <$> traverse decodeNativeScript xs
+        mkRequireMOf @era n <$> traverse decodeInner xs
     decodeTimeExpire o =
         mkTimeExpire @era . SlotNo <$> (o .: "slot")
     decodeTimeStart o =
         mkTimeStart @era . SlotNo <$> (o .: "slot")
+
+decodeDijkstraNativeScript ::
+    Json.Value ->
+    Json.Parser (Ledger.NativeScript DijkstraEra)
+decodeDijkstraNativeScript value =
+    Json.withObject
+        "Script<Native>"
+        ( \o -> do
+            clause <- o .: "clause"
+            case clause :: Text of
+                "guard" -> do
+                    from <- o .: "from" >>= decodeStakingCredential decodeAsScriptHash
+                    pure (Ledger.Dijkstra.RequireGuard (coerceKeyRole from))
+                _ ->
+                    decodeNativeScriptWith decodeDijkstraNativeScript value
+        )
+        value
 
 decodeTip ::
     Json.Value ->
@@ -3039,7 +3079,7 @@ decodeTxOut ::
     Json.Value ->
     Json.Parser (MultiEraTxOut (CardanoBlock crypto))
 decodeTxOut = Json.withObject "TxOut" $ \o -> do
-    decodeTxOutBabbage o <|> decodeTxOutConway o
+    decodeTxOutBabbage o <|> decodeTxOutConway o <|> decodeTxOutDijkstra o
   where
     decodeTxOutBabbage o = do
         address <- o .: "address" >>= decodeAddress
@@ -3064,7 +3104,7 @@ decodeTxOut = Json.withObject "TxOut" $ \o -> do
                 .:? "script"
                 >>= maybe
                     (pure SNothing)
-                    (fmap SJust . decodeScript)
+                    (fmap SJust . decodeScript decodeNativeScript)
 
         pure $ TxOutInBabbageEra $ Ledger.Babbage.BabbageTxOut address value datum script
 
@@ -3091,9 +3131,36 @@ decodeTxOut = Json.withObject "TxOut" $ \o -> do
                 .:? "script"
                 >>= maybe
                     (pure SNothing)
-                    (fmap SJust . decodeScript)
+                    (fmap SJust . decodeScript decodeNativeScript)
 
         pure $ TxOutInConwayEra $ Ledger.Babbage.BabbageTxOut address value datum script
+
+    decodeTxOutDijkstra o = do
+        address <- o .: "address" >>= decodeAddress
+        value <- o .: "value" >>= decodeValue
+
+        datumHash <- o .:? "datumHash"
+        inlineDatum <- o .:? "datum"
+        datum <- case (datumHash, inlineDatum) of
+            (Nothing, Nothing) ->
+                pure Ledger.Plutus.NoDatum
+            (Just Json.Null, Just Json.Null) ->
+                pure Ledger.Plutus.NoDatum
+            (Just x, Nothing) ->
+                Ledger.Plutus.DatumHash <$> decodeDatumHash x
+            (Nothing, Just x) ->
+                Ledger.Plutus.Datum <$> decodeBinaryData @DijkstraEra x
+            (Just{}, Just{}) ->
+                fail "specified both 'datumHash' & 'datum'"
+
+        script <-
+            o
+                .:? "script"
+                >>= maybe
+                    (pure SNothing)
+                    (fmap SJust . decodeScript decodeDijkstraNativeScript)
+
+        pure $ TxOutInDijkstraEra $ Ledger.Babbage.BabbageTxOut address value datum script
 
 decodeUtxo ::
     forall block.
@@ -3104,6 +3171,7 @@ decodeUtxo v = do
     xs <- Json.parseJSONList v
     (UTxOInBabbageEra . Sh.UTxO . Map.fromList <$> traverse decodeBabbageUtxoEntry xs)
         <|> (UTxOInConwayEra . Sh.UTxO . Map.fromList <$> traverse decodeConwayUtxoEntry xs)
+        <|> (UTxOInDijkstraEra . Sh.UTxO . Map.fromList <$> traverse decodeDijkstraUtxoEntry xs)
   where
     decodeBabbageUtxoEntry ::
         Json.Value ->
@@ -3114,6 +3182,7 @@ decodeUtxo v = do
             <*> ( decodeTxOut o >>= \case
                     TxOutInBabbageEra o' -> pure o'
                     TxOutInConwayEra{} -> empty
+                    TxOutInDijkstraEra{} -> empty
                 )
 
     decodeConwayUtxoEntry ::
@@ -3125,6 +3194,19 @@ decodeUtxo v = do
             <*> ( decodeTxOut o >>= \case
                     TxOutInBabbageEra o' -> pure (upgrade o')
                     TxOutInConwayEra o' -> pure o'
+                    TxOutInDijkstraEra{} -> empty
+                )
+
+    decodeDijkstraUtxoEntry ::
+        Json.Value ->
+        Json.Parser (Ledger.TxIn, Ledger.Babbage.BabbageTxOut DijkstraEra)
+    decodeDijkstraUtxoEntry o =
+        (,)
+            <$> decodeTxIn o
+            <*> ( decodeTxOut o >>= \case
+                    TxOutInBabbageEra o' -> pure (upgrade (upgrade o'))
+                    TxOutInConwayEra o' -> pure (upgrade o')
+                    TxOutInDijkstraEra o' -> pure o'
                 )
 
 decodeValue ::

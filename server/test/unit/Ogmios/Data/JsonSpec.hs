@@ -107,6 +107,7 @@ import Ogmios.Data.Json.Prelude (
 import Ogmios.Data.Json.Query (
     QueryInEra,
     SomeQuery (..),
+    decodeNativeScript,
     parseQueryLedgerConstitution,
     parseQueryLedgerConstitutionalCommittee,
     parseQueryLedgerDelegateRepresentatives,
@@ -192,6 +193,7 @@ import Ogmios.Data.Protocol.TxSubmission (
     EvaluateTransactionResponse,
     SubmitTransaction,
     SubmitTransactionResponse (..),
+    UTxO (..),
     _encodeEvaluateTransactionResponse,
     _encodeSubmitTransactionResponse,
  )
@@ -483,9 +485,29 @@ spec = do
                 Json.Success UTxOInDijkstraEra{} ->
                     fail "successfully decoded an invalid payload (as Dijkstra Utxo)?"
 
+        specify "Golden: Utxo_5.json" $ do
+            json <- decodeFileThrow "Utxo_5.json"
+            case Json.parse decodeUtxo json of
+                Json.Error e ->
+                    fail (show e)
+                Json.Success (UTxOInDijkstraEra (UTxO utxo)) ->
+                    Map.size utxo `shouldBe` 5
+                Json.Success _ ->
+                    fail "decoded a Utxo with a guard script in an era before Dijkstra?"
+
+        specify "Golden: Utxo_6.json" $ do
+            json <- decodeFileThrow "Utxo_6.json"
+            case Json.parse decodeUtxo json of
+                Json.Error e ->
+                    fail (show e)
+                Json.Success (UTxOInDijkstraEra (UTxO utxo)) ->
+                    Map.size utxo `shouldBe` 1
+                Json.Success _ ->
+                    fail "decoded a Utxo with a plutus:v4 script in an era before Dijkstra?"
+
         specify "Golden: Script_Native_0.json" $ do
             json <- decodeFileThrow "Script_Native_0.json"
-            case traverse @[] (Json.parse (decodeScript @BabbageEra)) json of
+            case traverse @[] (Json.parse (decodeScript @BabbageEra decodeNativeScript)) json of
                 Json.Error e ->
                     fail (show e)
                 Json.Success{} ->
@@ -1060,6 +1082,13 @@ spec = do
             "genesisConfiguration"
             (Just "Alonzo")
             (Just [aesonQQ|{ "era": "alonzo" }|])
+            (parseQueryNetworkGenesisConfiguration genGenesisConfig)
+
+        validateNetworkQueryTagged
+            10
+            "genesisConfiguration"
+            (Just "Conway")
+            (Just [aesonQQ|{ "era": "conway" }|])
             (parseQueryNetworkGenesisConfiguration genGenesisConfig)
 
         validateNetworkQuery

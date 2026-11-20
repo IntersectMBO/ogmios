@@ -1,0 +1,99 @@
+[
+  {
+    "transaction": {
+      "id": "e7eabf0367fe570e5723079b06c3a6623b205909162058103e5a74e3b518aad0"
+    },
+    "index": 0,
+    "address": "addr_test1wqag3rt979nep9g2wtdwu8mr4gz6m4kjdpp5zp705km8wys6t2kla",
+    "value": { "ada": { "lovelace": 1094740 } }
+  },
+  {
+    "transaction": {
+      "id": "e7eabf0367fe570e5723079b06c3a6623b205909162058103e5a74e3b518aad0"
+    },
+    "index": 1,
+    "address": "addr_test1wqag3rt979nep9g2wtdwu8mr4gz6m4kjdpp5zp705km8wys6t2kla",
+    "value": { "ada": { "lovelace": 1094740 } },
+    "script": {
+      "language": "native",
+      "json": {
+        "clause": "guard",
+        "from": "7616bc21e09658365ae3410c7ee0cca1e058a2264d9037bb079ed535"
+      }
+    }
+  },
+  {
+    "transaction": {
+      "id": "e7eabf0367fe570e5723079b06c3a6623b205909162058103e5a74e3b518aad0"
+    },
+    "index": 2,
+    "address": "addr_test1wqag3rt979nep9g2wtdwu8mr4gz6m4kjdpp5zp705km8wys6t2kla",
+    "value": { "ada": { "lovelace": 1094740 } },
+    "script": {
+      "language": "native",
+      "json": {
+        "clause": "all",
+        "from": [
+          {
+            "clause": "guard",
+            "from": "7616bc21e09658365ae3410c7ee0cca1e058a2264d9037bb079ed535"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "transaction": {
+      "id": "e7eabf0367fe570e5723079b06c3a6623b205909162058103e5a74e3b518aad0"
+    },
+    "index": 3,
+    "address": "addr_test1wqag3rt979nep9g2wtdwu8mr4gz6m4kjdpp5zp705km8wys6t2kla",
+    "value": { "ada": { "lovelace": 1094740 } },
+    "script": {
+      "language": "native",
+      "json": {
+        "clause": "any",
+        "from": [
+          {
+            "clause": "signature",
+            "from": "3c07030e36bfffe67e2e2ec09e5293d384637cd2f004356ef320f3fe"
+          },
+          {
+            "clause": "guard",
+            "from": "7616bc21e09658365ae3410c7ee0cca1e058a2264d9037bb079ed535"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "transaction": {
+      "id": "e7eabf0367fe570e5723079b06c3a6623b205909162058103e5a74e3b518aad0"
+    },
+    "index": 4,
+    "address": "addr_test1wqag3rt979nep9g2wtdwu8mr4gz6m4kjdpp5zp705km8wys6t2kla",
+    "value": { "ada": { "lovelace": 1094740 } },
+    "script": {
+      "language": "native",
+      "json": {
+        "clause": "some",
+        "atLeast": 1,
+        "from": [
+          {
+            "clause": "signature",
+            "from": "3c07030e36bfffe67e2e2ec09e5293d384637cd2f004356ef320f3fe"
+          },
+          {
+            "clause": "all",
+            "from": [
+              {
+                "clause": "guard",
+                "from": "7616bc21e09658365ae3410c7ee0cca1e058a2264d9037bb079ed535"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+]

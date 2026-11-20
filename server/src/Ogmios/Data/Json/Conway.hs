@@ -10,6 +10,7 @@ import Ogmios.Data.Json.Prelude
 import Cardano.Ledger.Api
     ( AsItem (..)
     , AsIx (..)
+    , Language (..)
     , PlutusPurpose
     )
 import Cardano.Ledger.BaseTypes
@@ -74,6 +75,7 @@ import qualified Cardano.Ledger.Conway.Scripts as Cn
 import qualified Cardano.Ledger.Conway.TxInfo as Cn
 import Cardano.Ledger.Plutus
     ( TxOutSource (..)
+    , mkCostModels
     )
 import qualified Data.Aeson as Json
 
@@ -410,23 +412,28 @@ encodeGenesis x =
       <> "constitutionalCommittee" .= encodeCommittee (Cn.cgCommittee x)
       <> "updatableParameters" .= encodeObject
            ( "stakePoolVotingThresholds" .=
-               encodePoolVotingThresholds (Cn.ucppPoolVotingThresholds (Cn.cgUpgradePParams x))
+               encodePoolVotingThresholds (Cn.ucppPoolVotingThresholds pparams)
           <> "delegateRepresentativeVotingThresholds" .=
-               encodeDRepVotingThresholds (Cn.ucppDRepVotingThresholds (Cn.cgUpgradePParams x))
+               encodeDRepVotingThresholds (Cn.ucppDRepVotingThresholds pparams)
           <> "constitutionalCommitteeMinSize" .=
-               encodeWord16 (Cn.ucppCommitteeMinSize (Cn.cgUpgradePParams x))
+               encodeWord16 (Cn.ucppCommitteeMinSize pparams)
           <> "constitutionalCommitteeMaxTermLength" .=
-               encodeEpochInterval (Cn.ucppCommitteeMaxTermLength (Cn.cgUpgradePParams x))
+               encodeEpochInterval (Cn.ucppCommitteeMaxTermLength pparams)
           <> "governanceActionLifetime" .=
-               encodeEpochInterval (Cn.ucppGovActionLifetime (Cn.cgUpgradePParams x))
+               encodeEpochInterval (Cn.ucppGovActionLifetime pparams)
           <> "governanceActionDeposit" .=
-               encodeCoin (Cn.ucppGovActionDeposit (Cn.cgUpgradePParams x))
+               encodeCoin (Cn.ucppGovActionDeposit pparams)
           <> "delegateRepresentativeDeposit" .=
-               encodeCoin (Cn.ucppDRepDeposit (Cn.cgUpgradePParams x))
+               encodeCoin (Cn.ucppDRepDeposit pparams)
           <> "delegateRepresentativeMaxIdleTime" .=
-               encodeEpochInterval (Cn.ucppDRepActivity (Cn.cgUpgradePParams x))
+               encodeEpochInterval (Cn.ucppDRepActivity pparams)
+          <> "plutusCostModels" .=
+               Alonzo.encodeCostModels (mkCostModels $ Map.singleton PlutusV3 (Cn.ucppPlutusV3CostModel pparams))
+          <> "minFeeReferenceScripts" .= encodeMinFeeReferenceScripts (Cn.ucppMinFeeRefScriptCostPerByte pparams)
            )
        )
+  where
+    pparams = Cn.cgUpgradePParams x
 
 encodeGovAction
     :: Cn.GovAction ConwayEra
@@ -527,6 +534,25 @@ encodeGovActionPurpose = \case
   Cn.ConstitutionPurpose ->
       encodeText "constitution"
 
+encodeMinFeeReferenceScripts
+    :: NonNegativeInterval
+    -> Json
+encodeMinFeeReferenceScripts base = encodeObject $
+    -- NOTE: This will very likely always be an integer. The ledger
+    -- represent this as a 'NonNegativeInterval', which technically
+    -- allow any _Rational_ value between 0 and +INFINITY, but it is
+    -- highly impractical to manipulate a Rationale here from an API
+    -- standpoint.
+    --
+    -- So this is a debatable choice, but I believe it's better for
+    -- users to convert to a Double so that it is directly a number in
+    -- JSON, and we can still accomodate decimal representation so long
+    -- as they don't get _too precise_ (which should be a fair
+    -- assumption in this context).
+    "base" .= encodeDouble (fromRational (unboundRational base)) <>
+    "range" .= encodeWord32 25600 <>
+    "multiplier" .= encodeDouble 1.2
+
 encodePParams
     :: (Ledger.PParamsHKD Identity era ~ Cn.ConwayPParams Identity era)
     => Ledger.PParams era
@@ -568,27 +594,7 @@ encodePParamsHKD encode pure_ x =
     encode "minFeeConstant"
         (encodeCoin . fromCompact) (unTHKD (Cn.cppTxFeeFixed x)) <>
     encode "minFeeReferenceScripts"
-        (\(base :: NonNegativeInterval) -> encodeObject
-            -- NOTE: This will very likely always be an integer. The ledger
-            -- represent this as a 'NonNegativeInterval', which technically
-            -- allow any _Rational_ value between 0 and +INFINITY, but it is
-            -- highly impractical to manipulate a Rationale here from an API
-            -- standpoint.
-            --
-            -- So this is a debatable choice, but I believe it's better for
-            -- users to convert to a Double so that it is directly a number in
-            -- JSON, and we can still accomodate decimal representation so long
-            -- as they don't get _too precise_ (which should be a fair
-            -- assumption in this context).
-            ( "base" .= encodeDouble (fromRational (unboundRational base))
-            <>
-              "range" .= encodeWord32 25600
-            <>
-              "multiplier" .= encodeDouble 1.2
-            )
-        )
-        (unTHKD (Cn.cppMinFeeRefScriptCostPerByte x))
-        <>
+        encodeMinFeeReferenceScripts (unTHKD (Cn.cppMinFeeRefScriptCostPerByte x)) <>
     encode "maxBlockBodySize"
         (encodeSingleton "bytes" . encodeWord32) (unTHKD (Cn.cppMaxBBSize x)) <>
     encode "maxBlockHeaderSize"

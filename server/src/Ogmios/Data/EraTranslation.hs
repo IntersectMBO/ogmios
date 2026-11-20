@@ -182,12 +182,18 @@ data MultiEraTxOut block where
         :: Babbage.BabbageTxOut ConwayEra
         -> MultiEraTxOut block
 
+    TxOutInDijkstraEra
+        :: Babbage.BabbageTxOut DijkstraEra
+        -> MultiEraTxOut block
+
 deriving instance
     ( Eq (Babbage.BabbageTxOut BabbageEra)
     , Eq (Babbage.BabbageTxOut ConwayEra)
+    , Eq (Babbage.BabbageTxOut DijkstraEra)
     ) => Eq (MultiEraTxOut block)
 
 deriving instance
     ( Show (Babbage.BabbageTxOut BabbageEra)
     , Show (Babbage.BabbageTxOut ConwayEra)
+    , Show (Babbage.BabbageTxOut DijkstraEra)
     ) => Show (MultiEraTxOut block)
