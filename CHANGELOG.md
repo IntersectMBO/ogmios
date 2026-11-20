@@ -40,7 +40,7 @@ math: true
 
 #### Fixed
 
-- A failure while encoding the response of `submitTransaction` now returns a JSON-RPC internal error to the client. Before, the websocket connection was closed with no reply.
+- A failure while encoding the response of `submitTransaction` or `nextTransaction` now returns a JSON-RPC internal error to the client. Before, the websocket connection was closed with no reply.
 
 - In the Dijkstra era, `submitTransaction` now reports why the ledger rejected a transaction, with the same errors as in earlier eras. Before, a Dijkstra rejection closed the websocket connection with no reply. A failure inside a sub-transaction gets the same error as the same failure in a top-level transaction, and the error does not say which sub-transaction failed. A withdrawal from an account that is not registered gets [`UnknownCredential`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3146/UnknownCredential) (`code=3146`) with the credential of one such account, where earlier eras report [`IncompleteWithdrawals`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3141/IncompleteWithdrawals) (`code=3141`).
 

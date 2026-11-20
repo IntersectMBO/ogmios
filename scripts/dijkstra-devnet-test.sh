@@ -9,7 +9,9 @@
 #   Start a local devnet in the Dijkstra era, with Ogmios on it. Build a
 #   transaction with a sub-transaction, but do not submit it. Then run
 #   COMMAND, with DIJKSTRA_TX_CBOR set to the transaction (in base16), and
-#   DIJKSTRA_TX_ID and DIJKSTRA_SUB_TX_ID set to the ids of both.
+#   DIJKSTRA_TX_ID and DIJKSTRA_SUB_TX_ID set to the ids of both, and
+#   DIJKSTRA_PRODUCER_PID set to the process id of the node that makes the
+#   blocks. Ogmios is connected to the other node, a relay.
 #   Everything started here stops when the script ends. The files of the
 #   devnet are removed, unless the script fails.
 #
@@ -31,13 +33,14 @@ MAGIC=42
 FEE=1000000
 # A short path: the node socket path must stay short.
 WORK=$(mktemp -d /tmp/devnet.XXXXXX)
-SOCKET="$WORK/env/socket/node1/sock"
+# node1 makes the blocks, node2 is a relay.
+SOCKET="$WORK/env/socket/node2/sock"
 PIDS=()
 
 # Whether the processes started here have all exited.
 none_running() {
   local pid
-  for pid in "${PIDS[@]}" "$(cat "$WORK/env/logs/node1/node.pid" 2>/dev/null)"; do
+  for pid in "${PIDS[@]}" "$(cat "$WORK/env/logs/node1/node.pid" 2>/dev/null)" "$(cat "$WORK/env/logs/node2/node.pid" 2>/dev/null)"; do
     if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
       return 1
     fi
@@ -49,9 +52,13 @@ stop() {
   for pid in "${PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
-  if [ -f "$WORK/env/logs/node1/node.pid" ]; then
-    kill "$(cat "$WORK/env/logs/node1/node.pid")" 2>/dev/null || true
-  fi
+  for node in node1 node2; do
+    if [ -f "$WORK/env/logs/$node/node.pid" ]; then
+      # A paused node only stops once it is resumed.
+      kill -CONT "$(cat "$WORK/env/logs/$node/node.pid")" 2>/dev/null || true
+      kill "$(cat "$WORK/env/logs/$node/node.pid")" 2>/dev/null || true
+    fi
+  done
   if [ "$status" -eq 0 ]; then
     # Wait for them to exit, or files they still write could stay behind.
     wait_for 30 none_running || true
@@ -100,12 +107,13 @@ lovelace_of() {
 }
 
 echo "Starting the devnet in $WORK."
-cardano-testnet create-env --num-pool-nodes 1 --testnet-magic "$MAGIC" --output "$WORK/env" \
+cardano-testnet create-env --nodes spo,relay --testnet-magic "$MAGIC" --output "$WORK/env" \
   > "$WORK/create-env.log" 2>&1 || fail "cardano-testnet create-env failed"
 # Conway from the start, Dijkstra from epoch 1. Dijkstra at epoch 0 stops the node.
 jq '.Configuration.Testing.TestDijkstraHardForkAtEpoch = 1' "$WORK/env/configuration.yaml" > "$WORK/config.json"
 mv "$WORK/config.json" "$WORK/env/configuration.yaml"
-(cd "$WORK" && exec cardano-testnet cardano --node-env "$WORK/env" > "$WORK/testnet.log" 2>&1) &
+# The test pauses the block producer, so the chain-stall watchdog is turned off.
+(cd "$WORK" && exec cardano-testnet cardano --node-env "$WORK/env" --disable-chain-stall-watchdog > "$WORK/testnet.log" 2>&1) &
 PIDS+=($!)
 
 wait_for 300 cli query tip || fail "the node does not answer"
@@ -157,7 +165,8 @@ cardano-cli dijkstra transaction sign \
 DIJKSTRA_SUB_TX_ID=$(cardano-cli dijkstra sub-transaction txid --signed-sub-tx-file "$WORK/sub.signed.json" --output-text)
 DIJKSTRA_TX_ID=$(cardano-cli dijkstra transaction txid --tx-file "$WORK/signed.json" --output-text)
 DIJKSTRA_TX_CBOR=$(jq -r .cborHex "$WORK/signed.json")
-export DIJKSTRA_SUB_TX_ID DIJKSTRA_TX_ID DIJKSTRA_TX_CBOR
+DIJKSTRA_PRODUCER_PID=$(cat "$WORK/env/logs/node1/node.pid")
+export DIJKSTRA_SUB_TX_ID DIJKSTRA_TX_ID DIJKSTRA_TX_CBOR DIJKSTRA_PRODUCER_PID
 echo "Built transaction $DIJKSTRA_TX_ID with sub-transaction $DIJKSTRA_SUB_TX_ID."
 
 "$@"

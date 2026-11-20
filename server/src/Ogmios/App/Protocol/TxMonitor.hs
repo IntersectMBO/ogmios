@@ -45,6 +45,12 @@ import Ogmios.Prelude hiding
     ( id
     )
 
+import Control.Monad.Class.MonadThrow
+    ( MonadEvaluate
+    )
+import Ogmios.App.Protocol
+    ( yieldEncoded
+    )
 import Ogmios.Control.MonadSTM
     ( MonadSTM (..)
     )
@@ -96,6 +102,7 @@ import qualified Codec.Json.Rpc as Rpc
 mkTxMonitorClient
     :: forall m block crypto.
         ( MonadSTM m
+        , MonadEvaluate m
         , HasTxId (GenTx block)
         , block ~ CardanoBlock crypto
         )
@@ -153,7 +160,10 @@ mkTxMonitorClient defaultWithInternalError TxMonitorCodecs{..} queue yield _node
                                 NextTransactionResponseId (txId <$> mTx)
                             Just NextTransactionAllFields ->
                                 NextTransactionResponseTx mTx
-                    yield $ encodeNextTransactionResponse $ toResponse response
+                    -- On an encoding failure the client gets an internal error, and the
+                    -- next call returns the transaction after this one.
+                    yieldEncoded defaultWithInternalError yield toResponse $
+                        encodeNextTransactionResponse $ toResponse response
                     clientStAcquired
         MsgHasTransaction HasTransaction{id} toResponse ->
             defaultWithInternalError clientStAcquired yield toResponse $ do
