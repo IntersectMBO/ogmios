@@ -44,7 +44,9 @@ import Cardano.Ledger.BaseTypes (
     BoundedRational (..),
     Exclusive (..),
     Inclusive (..),
+    Milliseconds32 (..),
     NonNegativeInterval,
+    PositiveInterval,
     ProtVer,
  )
 import Cardano.Ledger.Compactible (
@@ -55,6 +57,9 @@ import Cardano.Ledger.Conway.PParams (
  )
 import Cardano.Ledger.HKD (
     HKDFunctor (..),
+ )
+import Cardano.Slotting.Slot (
+    SlotInterval (..),
  )
 
 import qualified Cardano.Ledger.HKD as Ledger
@@ -665,19 +670,29 @@ encodePParamsHKD encode pure_ x =
             "minFeeConstant"
             (encodeCoin . fromCompact)
             (unTHKD (Di.dppTxFeeFixed x))
-        <> encode
-            "minFeeReferenceScripts"
-            ( \(base :: NonNegativeInterval) ->
-                encodeObject
-                    ( "base"
-                        .= encodeDouble (fromRational (unboundRational base))
-                        <> "range"
-                        .= encodeWord32 25600
-                        <> "multiplier"
-                        .= encodeDouble 1.2
+        <> "minFeeReferenceScripts"
+        .=? OmitWhen
+            (== encodeObject mempty)
+            identity
+            ( encodeObject
+                ( encode
+                    "base"
+                    ( \(base :: NonNegativeInterval) ->
+                        encodeDouble (fromRational (unboundRational base))
                     )
+                    (unTHKD (Di.dppMinFeeRefScriptCostPerByte x))
+                    <> encode
+                        "range"
+                        (encodeNonZero encodeWord32)
+                        (unTHKD (Di.dppRefScriptCostStride x))
+                    <> encode
+                        "multiplier"
+                        ( \(multiplier :: PositiveInterval) ->
+                            encodeDouble (fromRational (unboundRational multiplier))
+                        )
+                        (unTHKD (Di.dppRefScriptCostMultiplier x))
+                )
             )
-            (unTHKD (Di.dppMinFeeRefScriptCostPerByte x))
         <> encode
             "maxBlockBodySize"
             (encodeSingleton "bytes" . encodeWord32)
@@ -802,6 +817,84 @@ encodePParamsHKD encode pure_ x =
             "maxReferenceScriptsSizePerTransaction"
             (encodeSingleton "bytes" . encodeWord32)
             (unTHKD (Di.dppMaxRefScriptSizePerTx x))
+        <> encode
+            "maxStakePoolPledgeLeverage"
+            (encodeStrictMaybe encodeNonNegativeInterval . Ledger.unMaxPledgeLeverage)
+            (unTHKD (Di.dppMaxPledgeLeverage x))
+        <> encode
+            "minStakePoolMargin"
+            encodeUnitInterval
+            (unTHKD (Di.dppMinPoolMargin x))
+        <> encode
+            "leiosAnnouncementPeriodLength"
+            (encodeSingleton "milliseconds" . encodeWord32 . unMilliseconds32)
+            (unTHKD (Di.dppLeiosAnnouncementPeriodLength x))
+        <> encode
+            "leiosVotePeriodLength"
+            (encodeSingleton "milliseconds" . encodeWord32 . unMilliseconds32)
+            (unTHKD (Di.dppLeiosVotePeriodLength x))
+        <> encode
+            "leiosDiffusionPeriodLength"
+            (encodeSingleton "milliseconds" . encodeWord32 . unMilliseconds32)
+            (unTHKD (Di.dppLeiosDiffusionPeriodLength x))
+        <> encode
+            "leiosCommitteeSize"
+            encodeWord16
+            (unTHKD (Di.dppLeiosCommitteeSize x))
+        <> encode
+            "leiosQuorumStakeThreshold"
+            encodeUnitInterval
+            (unTHKD (Di.dppLeiosQuorumStakeThreshold x))
+        <> encode
+            "maxEndorserBlockReferencesSize"
+            (encodeSingleton "bytes" . encodeWord32)
+            (unTHKD (Di.dppMaxEndorserBlockReferencesSize x))
+        <> encode
+            "maxEndorserBlockTransactionsSize"
+            (encodeSingleton "bytes" . encodeWord32)
+            (unTHKD (Di.dppMaxEndorserBlockTxsSize x))
+        <> encode
+            "maxExecutionUnitsPerEndorserBlock"
+            (Alonzo.encodeExUnits . Al.unOrdExUnits)
+            (unTHKD (Di.dppMaxEndorserBlockExUnits x))
+        <> encode
+            "maxReferenceScriptsSizePerEndorserBlock"
+            (encodeSingleton "bytes" . encodeWord32)
+            (unTHKD (Di.dppMaxRefScriptSizePerEndorserBlock x))
+        <> encode
+            "perasMinCandidateBlockAge"
+            (encodeWord32 . unSlotInterval)
+            (unTHKD (Di.dppPerasMinCandidateBlockAge x))
+        <> encode
+            "perasHealingFactor"
+            ( \(factor :: PositiveInterval) ->
+                encodeRational (unboundRational factor)
+            )
+            (unTHKD (Di.dppPerasHealingFactor x))
+        <> encode
+            "perasCertificateBoost"
+            encodeWord16
+            (unTHKD (Di.dppPerasCertBoost x))
+        <> encode
+            "perasTargetCommitteeSize"
+            encodeWord16
+            (unTHKD (Di.dppPerasTargetCommitteeSize x))
+        <> encode
+            "perasBootstrapRound"
+            (encodeStrictMaybe encodeWord32)
+            (unTHKD (Di.dppPerasBootstrapRound x))
+        <> encode
+            "perasQuorumThresholdSafetyMargin"
+            encodeUnitInterval
+            (unTHKD (Di.dppPerasQuorumThresholdSafetyMargin x))
+        <> encode
+            "referenceInputsCostPerMultiAssetPolicy"
+            encodeCoin
+            (unTHKD (Di.dppRefInputsCostPerMultiAssetPolicy x))
+        <> encode
+            "referenceInputsCostPerDatumByte"
+            (encodeInteger . unCoin . fromCompact . Ba.unCoinPerByte)
+            (unTHKD (Di.dppRefInputsCostPerDatumByte x))
         & encodeObject
 
 encodeProposalProcedure ::

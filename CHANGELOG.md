@@ -38,6 +38,8 @@ math: true
 
 - Bump dependencies to the latest cardano-ledger, ouroboros-consensus and ouroboros-network releases.
 
+- In the Dijkstra era, the `minFeeReferenceScripts` of a governance proposal only has the parts that the proposal changes: `base`, `range` or `multiplier`. The JSON schema no longer requires all three there.
+
 #### Fixed
 
 - A failure while encoding the response of `submitTransaction` or `nextTransaction` now returns a JSON-RPC internal error to the client. Before, the websocket connection was closed with no reply.
@@ -73,6 +75,12 @@ math: true
 - `queryNetwork/genesisConfiguration` for the Conway era now returns `plutusCostModels` (the Plutus V3 cost model) and `minFeeReferenceScripts` in `updatableParameters`. Before, both were missing.
 
 - `queryLedgerState/rewardAccountSummaries` now returns registered reward accounts that are not delegated to a stake pool, without a `stakePool` field. Before, it left them out.
+
+- `queryLedgerState/protocolParameters` now returns the protocol parameters in the Dijkstra era. Before, it failed there with error `2002` (query unavailable in the current era). In the Dijkstra era, the result has `maxReferenceScriptsSizePerBlock` and `maxReferenceScriptsSizePerTransaction` instead of `maxReferenceScriptsSize`. In the Dijkstra era, `minFeeReferenceScripts.range` and `minFeeReferenceScripts.multiplier` are protocol parameters, so they can change. Before Dijkstra, they are always 25600 and 1.2. The result also has the new protocol parameters of the Dijkstra era, which governance proposals can change too:
+  - `maxStakePoolPledgeLeverage` (`null` when there is no limit) and `minStakePoolMargin`.
+  - `referenceInputsCostPerMultiAssetPolicy` and `referenceInputsCostPerDatumByte`, the costs of reference inputs.
+  - Leios: `leiosAnnouncementPeriodLength`, `leiosVotePeriodLength`, `leiosDiffusionPeriodLength`, `leiosCommitteeSize`, `leiosQuorumStakeThreshold`, `maxEndorserBlockReferencesSize`, `maxEndorserBlockTransactionsSize`, `maxExecutionUnitsPerEndorserBlock` and `maxReferenceScriptsSizePerEndorserBlock`.
+  - Peras: `perasMinCandidateBlockAge` (in slots), `perasHealingFactor`, `perasCertificateBoost`, `perasTargetCommitteeSize`, `perasBootstrapRound` (`null` when not set) and `perasQuorumThresholdSafetyMargin`.
 
 ### [6.14.0] - 2025-10-16
 

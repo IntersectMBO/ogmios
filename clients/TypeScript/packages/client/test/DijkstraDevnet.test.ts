@@ -1,10 +1,11 @@
 import { dummyInteractionContext } from './helpers'
 import { createChainSynchronizationClient } from '../src/ChainSynchronization'
-import { networkTip } from '../src/LedgerStateQuery'
+import { networkTip, protocolParameters } from '../src/LedgerStateQuery'
 import { createMempoolMonitoringClient, MempoolMonitoringClient } from '../src/MempoolMonitoring'
 import { submitTransaction } from '../src/TransactionSubmission'
-import { Transaction } from '@cardano-ogmios/schema'
+import { ProtocolParameters, Transaction } from '@cardano-ogmios/schema'
 import { execFileSync } from 'child_process'
+import { readFileSync } from 'fs'
 import { inspect } from 'util'
 
 // Set by scripts/dijkstra-devnet-test.sh. Without DIJKSTRA_TX_ID, these tests are skipped.
@@ -12,6 +13,7 @@ const transactionCbor = process.env.DIJKSTRA_TX_CBOR
 const transactionId = process.env.DIJKSTRA_TX_ID
 const subTransactionId = process.env.DIJKSTRA_SUB_TX_ID
 const producerPid = process.env.DIJKSTRA_PRODUCER_PID
+const protocolParametersFile = process.env.DIJKSTRA_PROTOCOL_PARAMETERS
 
 // Pause a process with SIGSTOP, and wait until it is stopped.
 const pause = async (pid: number) => {
@@ -19,6 +21,101 @@ const pause = async (pid: number) => {
   while (!execFileSync('ps', ['-o', 'stat=', '-p', String(pid)]).toString().trim().startsWith('T')) {
     await new Promise(resolve => setTimeout(resolve, 10))
   }
+}
+
+// Each protocol parameter of cardano-cli, and where Ogmios puts it.
+const fromOgmios: { [cliName: string]: (p: ProtocolParameters) => unknown } = {
+  txFeePerByte: p => p.minFeeCoefficient,
+  txFeeFixed: p => p.minFeeConstant.ada.lovelace,
+  minFeeRefScriptCostPerByte: p => p.minFeeReferenceScripts.base,
+  refScriptCostStride: p => p.minFeeReferenceScripts.range,
+  refScriptCostMultiplier: p => p.minFeeReferenceScripts.multiplier,
+  maxBlockBodySize: p => p.maxBlockBodySize.bytes,
+  maxBlockHeaderSize: p => p.maxBlockHeaderSize.bytes,
+  maxTxSize: p => p.maxTransactionSize.bytes,
+  stakeAddressDeposit: p => p.stakeCredentialDeposit.ada.lovelace,
+  stakePoolDeposit: p => p.stakePoolDeposit.ada.lovelace,
+  poolRetireMaxEpoch: p => p.stakePoolRetirementEpochBound,
+  stakePoolTargetNum: p => p.desiredNumberOfStakePools,
+  poolPledgeInfluence: p => p.stakePoolPledgeInfluence,
+  monetaryExpansion: p => p.monetaryExpansion,
+  treasuryCut: p => p.treasuryExpansion,
+  minPoolCost: p => p.minStakePoolCost.ada.lovelace,
+  utxoCostPerByte: p => p.minUtxoDepositCoefficient,
+  costModels: p => Object.fromEntries(
+    Object.entries(p.plutusCostModels).map(([language, model]) => [language.replace('plutus:v', 'PlutusV'), model])
+  ),
+  executionUnitPrices: p => ({ priceMemory: p.scriptExecutionPrices.memory, priceSteps: p.scriptExecutionPrices.cpu }),
+  maxTxExecutionUnits: p => ({ memory: p.maxExecutionUnitsPerTransaction.memory, steps: p.maxExecutionUnitsPerTransaction.cpu }),
+  maxBlockExecutionUnits: p => ({ memory: p.maxExecutionUnitsPerBlock.memory, steps: p.maxExecutionUnitsPerBlock.cpu }),
+  maxValueSize: p => p.maxValueSize.bytes,
+  collateralPercentage: p => p.collateralPercentage,
+  maxCollateralInputs: p => p.maxCollateralInputs,
+  protocolVersion: p => p.version,
+  poolVotingThresholds: p => ({
+    motionNoConfidence: p.stakePoolVotingThresholds.noConfidence,
+    committeeNormal: p.stakePoolVotingThresholds.constitutionalCommittee.default,
+    committeeNoConfidence: p.stakePoolVotingThresholds.constitutionalCommittee.stateOfNoConfidence,
+    hardForkInitiation: p.stakePoolVotingThresholds.hardForkInitiation,
+    ppSecurityGroup: p.stakePoolVotingThresholds.protocolParametersUpdate.security
+  }),
+  dRepVotingThresholds: p => ({
+    motionNoConfidence: p.delegateRepresentativeVotingThresholds.noConfidence,
+    committeeNormal: p.delegateRepresentativeVotingThresholds.constitutionalCommittee.default,
+    committeeNoConfidence: p.delegateRepresentativeVotingThresholds.constitutionalCommittee.stateOfNoConfidence,
+    updateToConstitution: p.delegateRepresentativeVotingThresholds.constitution,
+    hardForkInitiation: p.delegateRepresentativeVotingThresholds.hardForkInitiation,
+    ppNetworkGroup: p.delegateRepresentativeVotingThresholds.protocolParametersUpdate.network,
+    ppEconomicGroup: p.delegateRepresentativeVotingThresholds.protocolParametersUpdate.economic,
+    ppTechnicalGroup: p.delegateRepresentativeVotingThresholds.protocolParametersUpdate.technical,
+    ppGovGroup: p.delegateRepresentativeVotingThresholds.protocolParametersUpdate.governance,
+    treasuryWithdrawal: p.delegateRepresentativeVotingThresholds.treasuryWithdrawals
+  }),
+  committeeMinSize: p => p.constitutionalCommitteeMinSize,
+  committeeMaxTermLength: p => p.constitutionalCommitteeMaxTermLength,
+  govActionLifetime: p => p.governanceActionLifetime,
+  govActionDeposit: p => p.governanceActionDeposit.ada.lovelace,
+  dRepDeposit: p => p.delegateRepresentativeDeposit.ada.lovelace,
+  dRepActivity: p => p.delegateRepresentativeMaxIdleTime,
+  maxRefScriptSizePerBlock: p => p.maxReferenceScriptsSizePerBlock.bytes,
+  maxRefScriptSizePerTx: p => p.maxReferenceScriptsSizePerTransaction.bytes,
+  maxPledgeLeverage: p => p.maxStakePoolPledgeLeverage,
+  minPoolMargin: p => p.minStakePoolMargin,
+  leiosAnnouncementPeriodLength: p => p.leiosAnnouncementPeriodLength.milliseconds,
+  leiosVotePeriodLength: p => p.leiosVotePeriodLength.milliseconds,
+  leiosDiffusionPeriodLength: p => p.leiosDiffusionPeriodLength.milliseconds,
+  leiosCommitteeSize: p => p.leiosCommitteeSize,
+  leiosQuorumStakeThreshold: p => p.leiosQuorumStakeThreshold,
+  maxEndorserBlockReferencesSize: p => p.maxEndorserBlockReferencesSize.bytes,
+  maxEndorserBlockTxsSize: p => p.maxEndorserBlockTransactionsSize.bytes,
+  maxEndorserBlockExecutionUnits: p => ({ memory: p.maxExecutionUnitsPerEndorserBlock.memory, steps: p.maxExecutionUnitsPerEndorserBlock.cpu }),
+  maxRefScriptSizePerEndorserBlock: p => p.maxReferenceScriptsSizePerEndorserBlock.bytes,
+  perasMinCandidateBlockAge: p => p.perasMinCandidateBlockAge,
+  perasHealingFactor: p => p.perasHealingFactor,
+  perasCertBoost: p => p.perasCertificateBoost,
+  perasTargetCommitteeSize: p => p.perasTargetCommitteeSize,
+  perasBootstrapRound: p => p.perasBootstrapRound,
+  perasQuorumThresholdSafetyMargin: p => p.perasQuorumThresholdSafetyMargin,
+  refInputsCostPerMultiAssetPolicy: p => p.referenceInputsCostPerMultiAssetPolicy.ada.lovelace,
+  refInputsCostPerDatumByte: p => p.referenceInputsCostPerDatumByte
+}
+
+// cardano-cli writes plain numbers. Ogmios writes ratios such as "3/4", and the client may give big integers.
+const asNumbers = (value: unknown): unknown => {
+  if (typeof value === 'bigint') {
+    return Number(value)
+  }
+  if (typeof value === 'string' && /^-?\d+\/\d+$/.test(value)) {
+    const [numerator, denominator] = value.split('/')
+    return Number(numerator) / Number(denominator)
+  }
+  if (Array.isArray(value)) {
+    return value.map(asNumbers)
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, asNumbers(item)]))
+  }
+  return value
 }
 
 const describeOnDevnet = transactionId === undefined ? describe.skip : describe
@@ -118,6 +215,32 @@ describeOnDevnet('Dijkstra devnet', () => {
       expect(tx.subTransactions?.map(subTx => subTx.id)).toEqual([subTransactionId])
     } finally {
       await client.shutdown()
+    }
+  })
+
+  it('reads the protocol parameters', async () => {
+    const context = await dummyInteractionContext()
+    try {
+      // Only the Dijkstra era has maxReferenceScriptsSizePerTransaction.
+      await expect(protocolParameters(context)).resolves.toHaveProperty('maxReferenceScriptsSizePerTransaction')
+    } finally {
+      context.socket.close()
+    }
+  })
+
+  it('reads the same protocol parameters as cardano-cli', async () => {
+    if (protocolParametersFile === undefined) {
+      throw new Error('DIJKSTRA_PROTOCOL_PARAMETERS is not set: run this test through scripts/dijkstra-devnet-test.sh')
+    }
+    const fromCli = JSON.parse(readFileSync(protocolParametersFile, 'utf8'))
+    const context = await dummyInteractionContext()
+    try {
+      const parameters = await protocolParameters(context)
+      const read = Object.fromEntries(Object.entries(fromOgmios).map(([name, from]) => [name, from(parameters)]))
+      // A parameter that cardano-cli has, and that is not in fromOgmios, makes this fail too.
+      expect(asNumbers(read)).toEqual(asNumbers(fromCli))
+    } finally {
+      context.socket.close()
     }
   })
 })

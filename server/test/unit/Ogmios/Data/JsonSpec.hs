@@ -20,10 +20,12 @@ import Cardano.Ledger.Api (
     eraProtVerLow,
  )
 import Cardano.Ledger.BaseTypes (
+    BoundedRational (..),
     Exclusive (..),
     Inclusive (..),
     Inject (..),
     StrictMaybe (..),
+    knownNonZeroBounded,
  )
 import Cardano.Ledger.Conway (
     ConwayEra,
@@ -326,6 +328,7 @@ import qualified Cardano.Ledger.Binary as Binary
 import qualified Cardano.Ledger.Conway.Governance as Cn
 import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.Credential as Ledger
+import qualified Cardano.Ledger.Dijkstra.PParams as Di
 import qualified Cardano.Ledger.Dijkstra.Scripts as Di
 import qualified Cardano.Ledger.Dijkstra.TxBody as Di
 import qualified Cardano.Ledger.Mary.Value as Ma
@@ -562,6 +565,19 @@ spec = do
     context "Dijkstra transactions" $ do
         prop "no field is dropped from the JSON"
             $ forAllBlind (reasonablySized genDijkstraTx) propNoFieldDropped
+
+    context "Dijkstra protocol parameters" $ do
+        specify "minFeeReferenceScripts has the range and multiplier of the protocol parameters" $ do
+            let pparams =
+                    Ledger.emptyPParams @DijkstraEra
+                        & Di.ppRefScriptCostStrideL .~ knownNonZeroBounded @1234
+                        & Di.ppRefScriptCostMultiplierL .~ fromJust (boundRational 1.5)
+            case encodingToValue (Dijkstra.encodePParams pparams) of
+                Json.Object o ->
+                    Json.lookup "minFeeReferenceScripts" o
+                        `shouldBe` Just [aesonQQ|{ "base": 0, "range": 1234, "multiplier": 1.5 }|]
+                _ ->
+                    expectationFailure "the protocol parameters are not a JSON object"
 
     context "SlotLength" $ do
         let matrix =
@@ -808,7 +824,7 @@ spec = do
 
         validateLedgerStateQuery
             30
-            (SomeShelleyEra ShelleyBasedEraConway)
+            (SomeShelleyEra ShelleyBasedEraDijkstra)
             "protocolParameters"
             Nothing
             (parseQueryLedgerProtocolParameters genPParamsResult)
@@ -1656,6 +1672,10 @@ validateLedgerStateQuery n vectorEra subMethod params parser = do
             Left e ->
                 expectationFailure $ "failed to parse JSON query params: " <> show e
             Right queryInEra -> do
+                when (isNothing (queryInEra vectorEra))
+                    $ expectationFailure
+                    $ "query unavailable in the era of its test vectors: "
+                    <> show vectorEra
                 let testedEras =
                         [ SomeShelleyEra ShelleyBasedEraShelley
                         , SomeShelleyEra ShelleyBasedEraAllegra

@@ -11,7 +11,9 @@
 #   COMMAND, with DIJKSTRA_TX_CBOR set to the transaction (in base16), and
 #   DIJKSTRA_TX_ID and DIJKSTRA_SUB_TX_ID set to the ids of both, and
 #   DIJKSTRA_PRODUCER_PID set to the process id of the node that makes the
-#   blocks. Ogmios is connected to the other node, a relay.
+#   blocks, and DIJKSTRA_PROTOCOL_PARAMETERS set to a file with the protocol
+#   parameters from cardano-cli. Ogmios is connected to the other node, a
+#   relay.
 #   Everything started here stops when the script ends. The files of the
 #   devnet are removed, unless the script fails.
 #
@@ -166,7 +168,9 @@ DIJKSTRA_SUB_TX_ID=$(cardano-cli dijkstra sub-transaction txid --signed-sub-tx-f
 DIJKSTRA_TX_ID=$(cardano-cli dijkstra transaction txid --tx-file "$WORK/signed.json" --output-text)
 DIJKSTRA_TX_CBOR=$(jq -r .cborHex "$WORK/signed.json")
 DIJKSTRA_PRODUCER_PID=$(cat "$WORK/env/logs/node1/node.pid")
-export DIJKSTRA_SUB_TX_ID DIJKSTRA_TX_ID DIJKSTRA_TX_CBOR DIJKSTRA_PRODUCER_PID
+DIJKSTRA_PROTOCOL_PARAMETERS="$WORK/protocol-parameters.json"
+cli dijkstra query protocol-parameters --out-file "$DIJKSTRA_PROTOCOL_PARAMETERS"
+export DIJKSTRA_SUB_TX_ID DIJKSTRA_TX_ID DIJKSTRA_TX_CBOR DIJKSTRA_PRODUCER_PID DIJKSTRA_PROTOCOL_PARAMETERS
 echo "Built transaction $DIJKSTRA_TX_ID with sub-transaction $DIJKSTRA_SUB_TX_ID."
 
 "$@"
