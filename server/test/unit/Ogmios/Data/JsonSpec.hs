@@ -1656,6 +1656,10 @@ validateLedgerStateQuery n vectorEra subMethod params parser = do
             Left e ->
                 expectationFailure $ "failed to parse JSON query params: " <> show e
             Right queryInEra -> do
+                when (isNothing (queryInEra vectorEra))
+                    $ expectationFailure
+                    $ "query unavailable in the era of its test vectors: "
+                    <> show vectorEra
                 let testedEras =
                         [ SomeShelleyEra ShelleyBasedEraShelley
                         , SomeShelleyEra ShelleyBasedEraAllegra
