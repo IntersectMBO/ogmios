@@ -38,7 +38,7 @@ math: true
 
 - Bump dependencies to the latest cardano-ledger, ouroboros-consensus and ouroboros-network releases.
 
-- In the Dijkstra era, the `minFeeReferenceScripts` of a governance proposal only has the parts that the proposal changes: `base`, `range` or `multiplier`. The JSON schema no longer requires all three there.
+- **⚠️ BREAKING-CHANGE ⚠️**: In the Dijkstra era, the `minFeeReferenceScripts` of a governance proposal only has the parts that the proposal changes: `base`, `range` or `multiplier`. The JSON schema of `ProposedProtocolParameters` no longer requires all three parts in any era, so in the TypeScript client they are now optional for Conway proposals too.
 
 #### Fixed
 
