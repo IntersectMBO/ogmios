@@ -201,6 +201,10 @@ spec = parallel $ do
             void $ readAlonzoGenesis configFile
             readConwayGenesis configFile >>= (`shouldSatisfy` isRight)
 
+        specify "Dijkstra, without a Dijkstra genesis (mainnet)" $ do
+            readDijkstraGenesis (getConfigFile "mainnet")
+                >>= (`shouldBe` Left "Missing 'DijkstraGenesisFile' from node's configuration.")
+
         specify "Dijkstra (cardano-testnet 11.2.0)" $ do
             genesis <- readDijkstraGenesis sectionedConfigFile >>= either (fail . toString) pure
             let parameters = inefficientEncodingToValue (Dijkstra.encodeGenesis genesis) ^? key "updatableParameters"
