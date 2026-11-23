@@ -26,6 +26,8 @@ math: true
 
 - New transaction submission error [`StakePoolVrfKeyAlreadyRegistered`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3176/StakePoolVrfKeyAlreadyRegistered) (`code=3176`) when a stake pool registration or update uses a VRF key that another stake pool already uses. `data.stakePool.id` gives the pool and `data.vrfVerificationKeyHash` the VRF key hash. Before, Ogmios reported this failure as [`UnknownStakePool`](https://ogmios.dev/mini-protocols/local-tx-submission#schema-3140/UnknownStakePool) (`code=3140`), which pointed to the wrong cause.
 
+- `queryNetwork/genesisConfiguration` accepts `"era": "dijkstra"`. It returns the initial values of the protocol parameters new in the Dijkstra era, read from the Dijkstra genesis file of the node configuration: reference-script limits and pricing, maximum pledge leverage, minimum pool margin, the PlutusV4 cost model, reference-input costs, and the Leios and Peras parameters.
+
 #### Changed
 
 - **⚠️ BREAKING-CHANGE ⚠️**: Ogmios now requires node-to-client version 23, which cardano-node 10.7.1 and later offer. A cardano-node that does not offer it is refused at the handshake. Ogmios then stops with an error that lists the node-to-client versions the cardano-node offers and the versions Ogmios supports, instead of a raw handshake protocol error.
