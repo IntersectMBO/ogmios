@@ -1,6 +1,6 @@
 import { dummyInteractionContext } from './helpers'
 import { createChainSynchronizationClient } from '../src/ChainSynchronization'
-import { networkTip, protocolParameters } from '../src/LedgerStateQuery'
+import { genesisConfiguration, networkTip, protocolParameters } from '../src/LedgerStateQuery'
 import { createMempoolMonitoringClient, MempoolMonitoringClient } from '../src/MempoolMonitoring'
 import { submitTransaction } from '../src/TransactionSubmission'
 import { ProtocolParameters, Transaction } from '@cardano-ogmios/schema'
@@ -14,6 +14,7 @@ const transactionId = process.env.DIJKSTRA_TX_ID
 const subTransactionId = process.env.DIJKSTRA_SUB_TX_ID
 const producerPid = process.env.DIJKSTRA_PRODUCER_PID
 const protocolParametersFile = process.env.DIJKSTRA_PROTOCOL_PARAMETERS
+const genesisFile = process.env.DIJKSTRA_GENESIS
 
 // Pause a process with SIGSTOP, and wait until it is stopped.
 const pause = async (pid: number) => {
@@ -239,6 +240,26 @@ describeOnDevnet('Dijkstra devnet', () => {
       const read = Object.fromEntries(Object.entries(fromOgmios).map(([name, from]) => [name, from(parameters)]))
       // A parameter that cardano-cli has, and that is not in fromOgmios, makes this fail too.
       expect(asNumbers(read)).toEqual(asNumbers(fromCli))
+    } finally {
+      context.socket.close()
+    }
+  })
+
+  it('reads the same Dijkstra genesis configuration as the genesis file', async () => {
+    if (genesisFile === undefined) {
+      throw new Error('DIJKSTRA_GENESIS is not set: run this test through scripts/dijkstra-devnet-test.sh')
+    }
+    const fromFile = JSON.parse(readFileSync(genesisFile, 'utf8'))
+    const context = await dummyInteractionContext()
+    try {
+      const genesis = await genesisConfiguration(context, 'dijkstra')
+      // The genesis file uses the names of cardano-cli, and Ogmios gives the same fields as in the protocol parameters.
+      const parameters = genesis.updatableParameters as unknown as ProtocolParameters
+      const read = Object.fromEntries(Object.keys(fromFile).map(name => [
+        name,
+        name === 'plutusV4CostModel' ? parameters.plutusCostModels['plutus:v4'] : fromOgmios[name](parameters)
+      ]))
+      expect(asNumbers(read)).toEqual(asNumbers(fromFile))
     } finally {
       context.socket.close()
     }
