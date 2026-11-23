@@ -579,6 +579,24 @@ spec = do
                 _ ->
                     expectationFailure "the protocol parameters are not a JSON object"
 
+        specify "a proposal that changes no part of minFeeReferenceScripts has no minFeeReferenceScripts" $ do
+            case encodingToValue (Dijkstra.encodePParamsUpdate (Ledger.emptyPParamsUpdate @DijkstraEra)) of
+                Json.Object o ->
+                    Json.lookup "minFeeReferenceScripts" o `shouldBe` Nothing
+                _ ->
+                    expectationFailure "the proposed protocol parameters are not a JSON object"
+
+        specify "a proposal that changes only the range has only the range in minFeeReferenceScripts" $ do
+            let update =
+                    Ledger.emptyPParamsUpdate @DijkstraEra
+                        & Di.ppuRefScriptCostStrideL .~ SJust (knownNonZeroBounded @1234)
+            case encodingToValue (Dijkstra.encodePParamsUpdate update) of
+                Json.Object o ->
+                    Json.lookup "minFeeReferenceScripts" o
+                        `shouldBe` Just [aesonQQ|{ "range": 1234 }|]
+                _ ->
+                    expectationFailure "the proposed protocol parameters are not a JSON object"
+
     context "SlotLength" $ do
         let matrix =
                 [
