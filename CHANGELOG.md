@@ -82,6 +82,8 @@ math: true
   - Leios: `leiosAnnouncementPeriodLength`, `leiosVotePeriodLength`, `leiosDiffusionPeriodLength`, `leiosCommitteeSize`, `leiosQuorumStakeThreshold`, `maxEndorserBlockReferencesSize`, `maxEndorserBlockTransactionsSize`, `maxExecutionUnitsPerEndorserBlock` and `maxReferenceScriptsSizePerEndorserBlock`.
   - Peras: `perasMinCandidateBlockAge` (in slots), `perasHealingFactor`, `perasCertificateBoost`, `perasTargetCommitteeSize`, `perasBootstrapRound` (`null` when not set) and `perasQuorumThresholdSafetyMargin`.
 
+- Ogmios now reads the node configuration format of cardano-node 11.2.0 and later (its mainnet configuration and the files cardano-testnet writes), where the settings sit in sections under `Configuration` (such as `Configuration.Protocol.ShelleyGenesisFile`). Before, it exited at start-up because it found no genesis files. Configurations with all settings at the top level still work.
+
 ### [6.14.0] - 2025-10-16
 
 #### Added

@@ -19,6 +19,7 @@ module Ogmios.App.Configuration
     , Severity (..)
 
     -- * Genesis Configurations
+    , lookupNodeConfig
     , readByronGenesis
     , readShelleyGenesis
     , readAlonzoGenesis
@@ -46,6 +47,9 @@ import Control.Arrow
 import Data.Aeson
     ( ToJSON
     , genericToEncoding
+    )
+import Data.Aeson.Key
+    ( Key
     )
 import Data.Aeson.Lens
     ( _JSON'
@@ -114,10 +118,21 @@ mkSystemStart =
   where
     toPicoResolution = (*1000000000000)
 
+-- | Look up a genesis file setting of the node configuration, where
+-- cardano-node looks for it. Since cardano-node 11.2.0, the setting sits in the
+-- @Protocol@ section under @Configuration@. The node also accepts it loose
+-- under @Configuration@, or at the top level as before.
+lookupNodeConfig :: Key -> Json.Value -> Maybe Text
+lookupNodeConfig k nodeConfig = asum
+    [ nodeConfig ^? key "Configuration" . key "Protocol" . key k . _String
+    , nodeConfig ^? key "Configuration" . key k . _String
+    , nodeConfig ^? key k . _String
+    ]
+
 readByronGenesis :: MonadIO m => FilePath -> m (GenesisConfig ByronEra)
 readByronGenesis configFile = do
     nodeConfig <- Yaml.decodeFileThrow @_ @Json.Value configFile
-    case nodeConfig ^? key "ByronGenesisFile" . _String of
+    case lookupNodeConfig "ByronGenesisFile" nodeConfig of
         Nothing ->
             liftIO $ fail "Missing 'ByronGenesisFile' from node's configuration."
         Just (toString -> genesisFile) -> do
@@ -131,7 +146,7 @@ readByronGenesis configFile = do
 readShelleyGenesis :: MonadIO m => FilePath -> m (GenesisConfig ShelleyEra)
 readShelleyGenesis configFile = do
     nodeConfig <- Yaml.decodeFileThrow @_ @Json.Value configFile
-    case nodeConfig ^? key "ShelleyGenesisFile" . _String of
+    case lookupNodeConfig "ShelleyGenesisFile" nodeConfig of
         Nothing ->
             liftIO $ fail "Missing 'ShelleyGenesisFile' from node's configuration."
         Just (toString -> genesisFile) -> do
@@ -140,7 +155,7 @@ readShelleyGenesis configFile = do
 readAlonzoGenesis :: MonadIO m => FilePath -> m (GenesisConfig AlonzoEra)
 readAlonzoGenesis configFile = do
     nodeConfig <- Yaml.decodeFileThrow @_ @Json.Value configFile
-    case nodeConfig ^? key "AlonzoGenesisFile" . _String of
+    case lookupNodeConfig "AlonzoGenesisFile" nodeConfig of
         Nothing ->
             liftIO $ fail "Missing 'AlonzoGenesisFile' from node's configuration."
         Just (toString -> genesisFile) -> do
@@ -218,7 +233,7 @@ readConwayGenesis configFile = do
             pure $ Left $
                 "Invalid (non-JSON or non-YAML) or missing node's configuration file: " <> formatParseException e
         Right nodeConfig ->
-            case nodeConfig ^? key "ConwayGenesisFile" . _String of
+            case lookupNodeConfig "ConwayGenesisFile" nodeConfig of
                 Nothing ->
                     pure $ Left "Missing 'ConwayGenesisFile' from node's configuration."
                 Just (toString -> genesisFile) -> do

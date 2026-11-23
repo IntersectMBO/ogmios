@@ -82,6 +82,7 @@ import Ogmios.App.Configuration
     , SystemStart (..)
     , TraceConfiguration (..)
     , includeAllCbor
+    , lookupNodeConfig
     , omitOptionalCbor
     )
 import Options.Applicative.Help.Pretty
@@ -383,8 +384,8 @@ parseNetworkParameters :: FilePath -> IO NetworkParameters
 parseNetworkParameters configFile = runOrDie $ do
     config <- decodeYaml configFile
     let genesisFiles = (,)
-            <$> config ^? key "ByronGenesisFile" . _String
-            <*> config ^? key "ShelleyGenesisFile" . _String
+            <$> lookupNodeConfig "ByronGenesisFile" config
+            <*> lookupNodeConfig "ShelleyGenesisFile" config
     case genesisFiles of
         Nothing ->
             throwE "Missing 'ByronGenesisFile' and/or 'ShelleyGenesisFile' from Cardano's configuration?"

@@ -14,6 +14,9 @@ module Ogmios.OptionsSpec
 
 import Ogmios.Prelude
 
+import Data.Aeson
+    ( (.=)
+    )
 import Data.List
     ( isInfixOf
     )
@@ -24,7 +27,12 @@ import Ogmios.App.Configuration
     , NetworkMagic (..)
     , NetworkParameters (..)
     , includeAllCbor
+    , lookupNodeConfig
     , mkSystemStart
+    , readAlonzoGenesis
+    , readByronGenesis
+    , readConwayGenesis
+    , readShelleyGenesis
     )
 import Ogmios.Control.MonadLog
     ( Severity (..)
@@ -54,6 +62,8 @@ import Test.Hspec
 import Test.Path.Util
     ( getProjectRoot
     )
+
+import qualified Data.Aeson as Json
 
 spec :: Spec
 spec = parallel $ do
@@ -114,6 +124,58 @@ spec = parallel $ do
             networkMagic  params `shouldBe` NetworkMagic 1
             systemStart   params `shouldBe` mkSystemStart 1654041600
             slotsPerEpoch params `shouldBe` EpochSlots 21600
+
+        specify "cardano-testnet 11.2.0 (settings in sections)" $ do
+            params <- parseNetworkParameters sectionedConfigFile
+            networkMagic  params `shouldBe` NetworkMagic 42
+            systemStart   params `shouldBe` mkSystemStart 1795464068
+            slotsPerEpoch params `shouldBe` EpochSlots 50
+
+    context "lookupNodeConfig" $ do
+        let lookupShelley = lookupNodeConfig "ShelleyGenesisFile"
+        let configuration = ("Configuration" .=) . Json.object
+        let protocol = ("Protocol" .=) . Json.object
+        let shelley = ("ShelleyGenesisFile" .=) . Json.String
+
+        specify "at the top level" $
+            lookupShelley (Json.object [shelley "top"])
+                `shouldBe` Just "top"
+
+        specify "in the Protocol section" $
+            lookupShelley (Json.object [configuration [protocol [shelley "protocol"]]])
+                `shouldBe` Just "protocol"
+
+        specify "loose under Configuration" $
+            lookupShelley (Json.object [configuration [shelley "loose"]])
+                `shouldBe` Just "loose"
+
+        specify "next to Configuration" $
+            lookupShelley (Json.object [configuration [], shelley "top"])
+                `shouldBe` Just "top"
+
+        specify "the Protocol section wins" $
+            lookupShelley (Json.object
+                [ configuration
+                    [ "Network" .= Json.object [shelley "network"]
+                    , protocol [shelley "protocol"]
+                    , shelley "loose"
+                    ]
+                , shelley "top"
+                ])
+                `shouldBe` Just "protocol"
+
+        specify "not in other sections" $
+            lookupShelley (Json.object [configuration ["Network" .= Json.object [shelley "network"]]])
+                `shouldBe` Nothing
+
+    context "genesis configurations" $ do
+        forM_ [ ("mainnet (flat settings)", getConfigFile "mainnet")
+              , ("cardano-testnet 11.2.0 (settings in sections)", sectionedConfigFile)
+              ] $ \(name, configFile) -> specify name $ do
+            void $ readByronGenesis configFile
+            void $ readShelleyGenesis configFile
+            void $ readAlonzoGenesis configFile
+            readConwayGenesis configFile >>= (`shouldSatisfy` isRight)
   where
     matrix =
         [ ( [], shouldFail )
@@ -297,6 +359,10 @@ isLeftWith :: (err -> Bool) -> Either err result -> Bool
 isLeftWith predicate = \case
     Left e -> predicate e
     Right{} -> False
+
+sectionedConfigFile :: FilePath
+sectionedConfigFile =
+    $(getProjectRoot) <> "/test/node-config/cardano-testnet-11.2.0/configuration.yaml"
 
 getConfigFile :: String -> FilePath
 getConfigFile network =

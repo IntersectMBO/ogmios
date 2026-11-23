@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/IntersectMBO/cardano-config/v2/schemas/config.schema.json",
+  "Configuration": {
+    "LocalConnections": {
+      "SocketPath": "db/node.socket"
+    },
+    "Network": {
+      "ExperimentalProtocolsEnabled": true,
+      "MaxConcurrencyBulkSync": 1,
+      "MaxConcurrencyDeadline": 2,
+      "PeerSharing": false
+    },
+    "Protocol": {
+      "AlonzoGenesisFile": "alonzo-genesis.json",
+      "AlonzoGenesisHash": "d9cb5f26ffb1f9d9cd16bb2921bb959ac405ded4dd338f11b21032378531a5bc",
+      "ByronGenesisFile": "byron-genesis.json",
+      "ByronGenesisHash": "cd43a5d909360cfb86a41ca65f295768f7b7d4bcea234ac173a8c73b7ae83913",
+      "ConwayGenesisFile": "conway-genesis.json",
+      "ConwayGenesisHash": "0e8dce2f240da02f87b91a4530099d39f43b6c62143a62f8443e9198fbd7f2a8",
+      "RequiresNetworkMagic": "RequiresMagic",
+      "ShelleyGenesisFile": "shelley-genesis.json",
+      "ShelleyGenesisHash": "98becd045e44470691d7fdf7e3dd911fd0821372342c44a1bdb49777b949d3d7"
+    },
+    "Testing": {
+      "DijkstraGenesisFile": "dijkstra-genesis.json",
+      "DijkstraGenesisHash": "3537930d1515a8a0a648dae633e485812eff10a7cf9a6a2c3391952789e13b3a",
+      "TestAllegraHardForkAtEpoch": 0,
+      "TestAlonzoHardForkAtEpoch": 0,
+      "TestBabbageHardForkAtEpoch": 0,
+      "TestConwayHardForkAtEpoch": 0,
+      "TestMaryHardForkAtEpoch": 0,
+      "TestShelleyHardForkAtEpoch": 0
+    }
+  },
+  "Version": 2
+}
