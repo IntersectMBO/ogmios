@@ -971,12 +971,14 @@ genGenesisConfig
        , Gen (GenesisConfig ShelleyEra)
        , Gen (GenesisConfig AlonzoEra)
        , Gen (GenesisConfig ConwayEra)
+       , Gen (GenesisConfig DijkstraEra)
        )
 genGenesisConfig =
     ( error "TODO: genGenesisConfig@ByronEra"
     , genGenesisConfigShelley
     , genGenesisConfigAlonzo
     , genGenesisConfigConway
+    , genGenesisConfigDijkstra
     )
 
 genGenesisConfigShelley
@@ -1001,6 +1003,11 @@ genGenesisConfigAlonzo =
 genGenesisConfigConway
     :: Gen (GenesisConfig ConwayEra)
 genGenesisConfigConway =
+    arbitrary
+
+genGenesisConfigDijkstra
+    :: Gen (GenesisConfig DijkstraEra)
+genGenesisConfigDijkstra =
     arbitrary
 
 genRewardsProvenanceResult

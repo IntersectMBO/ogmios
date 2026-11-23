@@ -1135,7 +1135,7 @@
   , "EraWithGenesis":
     { "title": "EraWithGenesis"
     , "type": "string"
-    , "enum": [ "byron", "shelley", "alonzo", "conway" ]
+    , "enum": [ "byron", "shelley", "alonzo", "conway", "dijkstra" ]
     }
 
   , "EraParameters":
@@ -1378,6 +1378,98 @@
           , "delegateRepresentativeMaxIdleTime": { "$ref": "cardano.json#/definitions/Epoch" }
           , "plutusCostModels": { "$ref": "cardano.json#/definitions/CostModels" }
           , "minFeeReferenceScripts": { "$ref": "cardano.json#/definitions/MinFeeReferenceScripts" }
+          }
+        }
+      }
+    }
+
+  , "Genesis<Dijkstra>":
+    { "title": "Genesis<Dijkstra>"
+    , "type": "object"
+    , "description": "A Dijkstra genesis configuration, with the initial values of the protocol parameters new in the era. They are also updatable across the era."
+    , "additionalProperties": false
+    , "required":
+      [ "era"
+      , "updatableParameters"
+      ]
+    , "properties":
+      { "era":
+        { "type": "string"
+        , "enum": [ "dijkstra" ]
+        }
+      , "updatableParameters":
+        { "type": "object"
+        , "additionalProperties": false
+        , "required":
+          [ "minFeeReferenceScripts"
+          , "maxReferenceScriptsSizePerBlock"
+          , "maxReferenceScriptsSizePerTransaction"
+          , "maxStakePoolPledgeLeverage"
+          , "minStakePoolMargin"
+          , "plutusCostModels"
+          , "leiosAnnouncementPeriodLength"
+          , "leiosVotePeriodLength"
+          , "leiosDiffusionPeriodLength"
+          , "leiosCommitteeSize"
+          , "leiosQuorumStakeThreshold"
+          , "maxEndorserBlockReferencesSize"
+          , "maxEndorserBlockTransactionsSize"
+          , "maxExecutionUnitsPerEndorserBlock"
+          , "maxReferenceScriptsSizePerEndorserBlock"
+          , "perasMinCandidateBlockAge"
+          , "perasHealingFactor"
+          , "perasCertificateBoost"
+          , "perasTargetCommitteeSize"
+          , "perasBootstrapRound"
+          , "perasQuorumThresholdSafetyMargin"
+          , "referenceInputsCostPerMultiAssetPolicy"
+          , "referenceInputsCostPerDatumByte"
+          ]
+        , "properties":
+          { "minFeeReferenceScripts":
+            { "type": "object"
+            , "additionalProperties": false
+            , "required": [ "range", "multiplier" ]
+            , "properties":
+              { "range": { "$ref": "cardano.json#/definitions/UInt32" }
+              , "multiplier":
+                { "type": "number"
+                , "description": "The multiplier increasing the cost of each tier."
+                }
+              }
+            }
+          , "maxReferenceScriptsSizePerBlock": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+          , "maxReferenceScriptsSizePerTransaction": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+          , "maxStakePoolPledgeLeverage":
+            { "oneOf":
+              [ { "$ref": "cardano.json#/definitions/Ratio" }
+              , { "type": "null" }
+              ]
+            }
+          , "minStakePoolMargin": { "$ref": "cardano.json#/definitions/Ratio" }
+          , "plutusCostModels": { "$ref": "cardano.json#/definitions/CostModels" }
+          , "leiosAnnouncementPeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+          , "leiosVotePeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+          , "leiosDiffusionPeriodLength": { "$ref": "cardano.json#/definitions/NumberOfMilliseconds" }
+          , "leiosCommitteeSize": { "$ref": "cardano.json#/definitions/UInt16" }
+          , "leiosQuorumStakeThreshold": { "$ref": "cardano.json#/definitions/Ratio" }
+          , "maxEndorserBlockReferencesSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+          , "maxEndorserBlockTransactionsSize": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+          , "maxExecutionUnitsPerEndorserBlock": { "$ref": "cardano.json#/definitions/ExecutionUnits" }
+          , "maxReferenceScriptsSizePerEndorserBlock": { "$ref": "cardano.json#/definitions/NumberOfBytes" }
+          , "perasMinCandidateBlockAge": { "$ref": "cardano.json#/definitions/UInt32" }
+          , "perasHealingFactor": { "$ref": "cardano.json#/definitions/Ratio" }
+          , "perasCertificateBoost": { "$ref": "cardano.json#/definitions/UInt16" }
+          , "perasTargetCommitteeSize": { "$ref": "cardano.json#/definitions/UInt16" }
+          , "perasBootstrapRound":
+            { "oneOf":
+              [ { "$ref": "cardano.json#/definitions/UInt32" }
+              , { "type": "null" }
+              ]
+            }
+          , "perasQuorumThresholdSafetyMargin": { "$ref": "cardano.json#/definitions/Ratio" }
+          , "referenceInputsCostPerMultiAssetPolicy": { "$ref": "cardano.json#/definitions/Value<AdaOnly>" }
+          , "referenceInputsCostPerDatumByte": { "$ref": "cardano.json#/definitions/UInt64" }
           }
         }
       }

@@ -10,6 +10,7 @@ module Ogmios.Data.Json.Dijkstra (
     encodeTxOut,
     encodeUtxo,
     encodeDelegCert,
+    encodeGenesis,
     encodeTxCert,
     encodeScriptPurposeItem,
     encodeScriptPurposeIndex,
@@ -76,6 +77,7 @@ import qualified Cardano.Ledger.Conway.Governance as Cn
 import qualified Cardano.Ledger.Conway.TxInfo as Cn
 import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.Credential as Ledger
+import qualified Cardano.Ledger.Dijkstra.Genesis as Di
 import qualified Cardano.Ledger.Dijkstra.PParams as Di
 import qualified Cardano.Ledger.Dijkstra.Scripts as Di
 import qualified Cardano.Ledger.Dijkstra.Tx as Di
@@ -83,6 +85,7 @@ import qualified Cardano.Ledger.Dijkstra.TxBody as Di
 import qualified Cardano.Ledger.Dijkstra.TxCert as Di
 import qualified Cardano.Ledger.Dijkstra.TxInfo as Di
 import qualified Cardano.Ledger.Mary.Value as Ma
+import qualified Cardano.Ledger.Plutus as Ledger
 import qualified Cardano.Ledger.Shelley.API as Sh
 
 import qualified Data.Map.Strict as Map
@@ -896,6 +899,71 @@ encodePParamsHKD encode pure_ x =
             (encodeInteger . unCoin . fromCompact . Ba.unCoinPerByte)
             (unTHKD (Di.dppRefInputsCostPerDatumByte x))
         & encodeObject
+
+encodeGenesis ::
+    Di.DijkstraGenesis ->
+    Json
+encodeGenesis genesis =
+    encodeObject
+        ( "era"
+            .= encodeText "dijkstra"
+            <> "updatableParameters"
+            .= encodeObject
+                ( "minFeeReferenceScripts"
+                    .= encodeObject
+                        ( "range"
+                            .= encodeNonZero encodeWord32 (Di.udppRefScriptCostStride x)
+                            <> "multiplier"
+                            .= encodeDouble (fromRational (unboundRational (Di.udppRefScriptCostMultiplier x)))
+                        )
+                    <> "maxReferenceScriptsSizePerBlock"
+                    .= encodeSingleton "bytes" (encodeWord32 (Di.udppMaxRefScriptSizePerBlock x))
+                    <> "maxReferenceScriptsSizePerTransaction"
+                    .= encodeSingleton "bytes" (encodeWord32 (Di.udppMaxRefScriptSizePerTx x))
+                    <> "maxStakePoolPledgeLeverage"
+                    .= encodeStrictMaybe encodeNonNegativeInterval (Ledger.unMaxPledgeLeverage (Di.udppMaxPledgeLeverage x))
+                    <> "minStakePoolMargin"
+                    .= encodeUnitInterval (Di.udppMinPoolMargin x)
+                    <> "plutusCostModels"
+                    .= Alonzo.encodeCostModels (Ledger.mkCostModels (Map.singleton Ledger.PlutusV4 (Di.udppPlutusV4CostModel x)))
+                    <> "leiosAnnouncementPeriodLength"
+                    .= encodeSingleton "milliseconds" (encodeWord32 (unMilliseconds32 (Di.udppLeiosAnnouncementPeriodLength x)))
+                    <> "leiosVotePeriodLength"
+                    .= encodeSingleton "milliseconds" (encodeWord32 (unMilliseconds32 (Di.udppLeiosVotePeriodLength x)))
+                    <> "leiosDiffusionPeriodLength"
+                    .= encodeSingleton "milliseconds" (encodeWord32 (unMilliseconds32 (Di.udppLeiosDiffusionPeriodLength x)))
+                    <> "leiosCommitteeSize"
+                    .= encodeWord16 (Di.udppLeiosCommitteeSize x)
+                    <> "leiosQuorumStakeThreshold"
+                    .= encodeUnitInterval (Di.udppLeiosQuorumStakeThreshold x)
+                    <> "maxEndorserBlockReferencesSize"
+                    .= encodeSingleton "bytes" (encodeWord32 (Di.udppMaxEndorserBlockReferencesSize x))
+                    <> "maxEndorserBlockTransactionsSize"
+                    .= encodeSingleton "bytes" (encodeWord32 (Di.udppMaxEndorserBlockTxsSize x))
+                    <> "maxExecutionUnitsPerEndorserBlock"
+                    .= Alonzo.encodeExUnits (Al.unOrdExUnits (Di.udppMaxEndorserBlockExUnits x))
+                    <> "maxReferenceScriptsSizePerEndorserBlock"
+                    .= encodeSingleton "bytes" (encodeWord32 (Di.udppMaxRefScriptSizePerEndorserBlock x))
+                    <> "perasMinCandidateBlockAge"
+                    .= encodeWord32 (unSlotInterval (Di.udppPerasMinCandidateBlockAge x))
+                    <> "perasHealingFactor"
+                    .= encodeRational (unboundRational (Di.udppPerasHealingFactor x))
+                    <> "perasCertificateBoost"
+                    .= encodeWord16 (Di.udppPerasCertBoost x)
+                    <> "perasTargetCommitteeSize"
+                    .= encodeWord16 (Di.udppPerasTargetCommitteeSize x)
+                    <> "perasBootstrapRound"
+                    .= encodeStrictMaybe encodeWord32 (Di.udppPerasBootstrapRound x)
+                    <> "perasQuorumThresholdSafetyMargin"
+                    .= encodeUnitInterval (Di.udppPerasQuorumThresholdSafetyMargin x)
+                    <> "referenceInputsCostPerMultiAssetPolicy"
+                    .= encodeCoin (Di.udppRefInputsCostPerMultiAssetPolicy x)
+                    <> "referenceInputsCostPerDatumByte"
+                    .= (encodeInteger . unCoin . fromCompact . Ba.unCoinPerByte) (Di.udppRefInputsCostPerDatumByte x)
+                )
+        )
+  where
+    x = Di.dgUpgradePParams genesis
 
 encodeProposalProcedure ::
     Cn.ProposalProcedure DijkstraEra ->

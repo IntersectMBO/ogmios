@@ -316,7 +316,7 @@ export type RewardAccountSummaries = RewardAccountSummary[];
 export type Delegator = {
   [k: string]: unknown;
 }[];
-export type EraWithGenesis = "byron" | "shelley" | "alonzo" | "conway";
+export type EraWithGenesis = "byron" | "shelley" | "alonzo" | "conway" | "dijkstra";
 export type UtcTime = string;
 /**
  * A magic number for telling networks apart. (e.g. 764824073)
@@ -3378,7 +3378,9 @@ export interface QueryNetworkGenesisConfiguration {
 export interface QueryNetworkGenesisConfigurationResponse {
   jsonrpc: "2.0";
   method: "queryNetwork/genesisConfiguration";
-  result: QueryNetworkInvalidGenesis | (GenesisByron | GenesisShelley | GenesisAlonzo | GenesisConway);
+  result:
+    | QueryNetworkInvalidGenesis
+    | (GenesisByron | GenesisShelley | GenesisAlonzo | GenesisConway | GenesisDijkstra);
   id?: unknown;
 }
 export interface QueryNetworkInvalidGenesis {
@@ -3491,6 +3493,59 @@ export interface GenesisConway {
     delegateRepresentativeMaxIdleTime: Epoch;
     plutusCostModels: CostModels;
     minFeeReferenceScripts: MinFeeReferenceScripts;
+  };
+}
+/**
+ * A Dijkstra genesis configuration, with the initial values of the protocol parameters new in the era. They are also updatable across the era.
+ */
+export interface GenesisDijkstra {
+  era: "dijkstra";
+  updatableParameters: {
+    minFeeReferenceScripts: {
+      range: UInt32;
+      /**
+       * The multiplier increasing the cost of each tier.
+       */
+      multiplier: number;
+    };
+    maxReferenceScriptsSizePerBlock: {
+      bytes: UInt64;
+    };
+    maxReferenceScriptsSizePerTransaction: {
+      bytes: UInt64;
+    };
+    maxStakePoolPledgeLeverage: Ratio | null;
+    minStakePoolMargin: Ratio;
+    plutusCostModels: CostModels;
+    leiosAnnouncementPeriodLength: {
+      milliseconds: UInt64;
+    };
+    leiosVotePeriodLength: {
+      milliseconds: UInt64;
+    };
+    leiosDiffusionPeriodLength: {
+      milliseconds: UInt64;
+    };
+    leiosCommitteeSize: UInt16;
+    leiosQuorumStakeThreshold: Ratio;
+    maxEndorserBlockReferencesSize: {
+      bytes: UInt64;
+    };
+    maxEndorserBlockTransactionsSize: {
+      bytes: UInt64;
+    };
+    maxExecutionUnitsPerEndorserBlock: ExecutionUnits;
+    maxReferenceScriptsSizePerEndorserBlock: {
+      bytes: UInt64;
+    };
+    perasMinCandidateBlockAge: UInt32;
+    perasHealingFactor: Ratio;
+    perasCertificateBoost: UInt16;
+    perasTargetCommitteeSize: UInt16;
+    perasBootstrapRound: UInt32 | null;
+    perasQuorumThresholdSafetyMargin: Ratio;
+    referenceInputsCostPerMultiAssetPolicy: ValueAdaOnly;
+    referenceInputsCostPerDatumByte: UInt64;
   };
 }
 /**

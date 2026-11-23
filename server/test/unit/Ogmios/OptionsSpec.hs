@@ -17,6 +17,9 @@ import Ogmios.Prelude
 import Data.Aeson
     ( (.=)
     )
+import Data.Aeson.Lens
+    ( key
+    )
 import Data.List
     ( isInfixOf
     )
@@ -32,12 +35,16 @@ import Ogmios.App.Configuration
     , readAlonzoGenesis
     , readByronGenesis
     , readConwayGenesis
+    , readDijkstraGenesis
     , readShelleyGenesis
     )
 import Ogmios.Control.MonadLog
     ( Severity (..)
     , TracerDefinition (..)
     , defaultTracers
+    )
+import Ogmios.Data.Json.Prelude
+    ( inefficientEncodingToValue
     )
 import Ogmios.Options
     ( Command (..)
@@ -64,6 +71,9 @@ import Test.Path.Util
     )
 
 import qualified Data.Aeson as Json
+import qualified Data.Aeson.KeyMap as KeyMap
+import qualified Data.Text as T
+import qualified Ogmios.Data.Json.Dijkstra as Dijkstra
 
 spec :: Spec
 spec = parallel $ do
@@ -145,6 +155,20 @@ spec = parallel $ do
             lookupShelley (Json.object [configuration [protocol [shelley "protocol"]]])
                 `shouldBe` Just "protocol"
 
+        specify "the Dijkstra genesis in the Testing section" $
+            lookupNodeConfig "DijkstraGenesisFile"
+                (Json.object [configuration ["Testing" .= Json.object ["DijkstraGenesisFile" .= Json.String "testing"]]])
+                `shouldBe` Just "testing"
+
+        specify "the Dijkstra genesis not in the Protocol section" $
+            lookupNodeConfig "DijkstraGenesisFile"
+                (Json.object [configuration [protocol ["DijkstraGenesisFile" .= Json.String "protocol"]]])
+                `shouldBe` Nothing
+
+        specify "not in the Testing section" $
+            lookupShelley (Json.object [configuration ["Testing" .= Json.object [shelley "testing"]]])
+                `shouldBe` Nothing
+
         specify "loose under Configuration" $
             lookupShelley (Json.object [configuration [shelley "loose"]])
                 `shouldBe` Just "loose"
@@ -176,6 +200,16 @@ spec = parallel $ do
             void $ readShelleyGenesis configFile
             void $ readAlonzoGenesis configFile
             readConwayGenesis configFile >>= (`shouldSatisfy` isRight)
+
+        specify "Dijkstra (cardano-testnet 11.2.0)" $ do
+            genesis <- readDijkstraGenesis sectionedConfigFile >>= either (fail . toString) pure
+            let parameters = inefficientEncodingToValue (Dijkstra.encodeGenesis genesis) ^? key "updatableParameters"
+            file <- Json.eitherDecodeFileStrict @Json.Object sectionedDijkstraGenesisFile >>= either fail pure
+            -- Every field of the genesis file, and where Ogmios puts it.
+            sort (fst <$> fromOgmiosDijkstraGenesis) `shouldBe` sort (KeyMap.keys file)
+            forM_ fromOgmiosDijkstraGenesis $ \(name, fromOgmios) ->
+                (name, asNumbers <$> (parameters >>= fromOgmios))
+                    `shouldBe` (name, asNumbers <$> KeyMap.lookup name file)
   where
     matrix =
         [ ( [], shouldFail )
@@ -360,9 +394,61 @@ isLeftWith predicate = \case
     Left e -> predicate e
     Right{} -> False
 
+fromOgmiosDijkstraGenesis :: [(Json.Key, Json.Value -> Maybe Json.Value)]
+fromOgmiosDijkstraGenesis =
+    [ ("maxRefScriptSizePerBlock", (^? key "maxReferenceScriptsSizePerBlock" . key "bytes"))
+    , ("maxRefScriptSizePerTx", (^? key "maxReferenceScriptsSizePerTransaction" . key "bytes"))
+    , ("refScriptCostStride", (^? key "minFeeReferenceScripts" . key "range"))
+    , ("refScriptCostMultiplier", (^? key "minFeeReferenceScripts" . key "multiplier"))
+    , ("maxPledgeLeverage", (^? key "maxStakePoolPledgeLeverage"))
+    , ("minPoolMargin", (^? key "minStakePoolMargin"))
+    , ("plutusV4CostModel", (^? key "plutusCostModels" . key "plutus:v4"))
+    , ("leiosAnnouncementPeriodLength", (^? key "leiosAnnouncementPeriodLength" . key "milliseconds"))
+    , ("leiosVotePeriodLength", (^? key "leiosVotePeriodLength" . key "milliseconds"))
+    , ("leiosDiffusionPeriodLength", (^? key "leiosDiffusionPeriodLength" . key "milliseconds"))
+    , ("leiosCommitteeSize", (^? key "leiosCommitteeSize"))
+    , ("leiosQuorumStakeThreshold", (^? key "leiosQuorumStakeThreshold"))
+    , ("maxEndorserBlockReferencesSize", (^? key "maxEndorserBlockReferencesSize" . key "bytes"))
+    , ("maxEndorserBlockTxsSize", (^? key "maxEndorserBlockTransactionsSize" . key "bytes"))
+    , ("maxEndorserBlockExecutionUnits", \p -> do
+        units <- p ^? key "maxExecutionUnitsPerEndorserBlock"
+        memory <- units ^? key "memory"
+        steps <- units ^? key "cpu"
+        pure $ Json.object [ "memory" .= memory, "steps" .= steps ])
+    , ("maxRefScriptSizePerEndorserBlock", (^? key "maxReferenceScriptsSizePerEndorserBlock" . key "bytes"))
+    , ("perasMinCandidateBlockAge", (^? key "perasMinCandidateBlockAge"))
+    , ("perasHealingFactor", (^? key "perasHealingFactor"))
+    , ("perasCertBoost", (^? key "perasCertificateBoost"))
+    , ("perasTargetCommitteeSize", (^? key "perasTargetCommitteeSize"))
+    , ("perasBootstrapRound", (^? key "perasBootstrapRound"))
+    , ("perasQuorumThresholdSafetyMargin", (^? key "perasQuorumThresholdSafetyMargin"))
+    , ("refInputsCostPerMultiAssetPolicy", (^? key "referenceInputsCostPerMultiAssetPolicy" . key "ada" . key "lovelace"))
+    , ("refInputsCostPerDatumByte", (^? key "referenceInputsCostPerDatumByte"))
+    ]
+
+-- | The genesis file has plain numbers, where Ogmios has ratios such as "3/4".
+asNumbers :: Json.Value -> Json.Value
+asNumbers = \case
+    Json.Number n ->
+        Json.toJSON (realToFrac n :: Double)
+    Json.String (T.splitOn "/" -> [numerator, denominator])
+        | Just n <- readMaybe @Double (toString numerator)
+        , Just d <- readMaybe @Double (toString denominator) ->
+            Json.toJSON (n / d)
+    Json.Array xs ->
+        Json.Array (asNumbers <$> xs)
+    Json.Object o ->
+        Json.Object (asNumbers <$> o)
+    other ->
+        other
+
 sectionedConfigFile :: FilePath
 sectionedConfigFile =
     $(getProjectRoot) <> "/test/node-config/cardano-testnet-11.2.0/configuration.yaml"
+
+sectionedDijkstraGenesisFile :: FilePath
+sectionedDijkstraGenesisFile =
+    $(getProjectRoot) <> "/test/node-config/cardano-testnet-11.2.0/dijkstra-genesis.json"
 
 getConfigFile :: String -> FilePath
 getConfigFile network =

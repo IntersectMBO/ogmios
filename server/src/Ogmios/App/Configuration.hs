@@ -24,6 +24,7 @@ module Ogmios.App.Configuration
     , readShelleyGenesis
     , readAlonzoGenesis
     , readConwayGenesis
+    , readDijkstraGenesis
 
     -- * NetworkParameters
     , NetworkParameters (..)
@@ -45,7 +46,8 @@ import Control.Arrow
     ( left
     )
 import Data.Aeson
-    ( ToJSON
+    ( FromJSON
+    , ToJSON
     , genericToEncoding
     )
 import Data.Aeson.Key
@@ -88,6 +90,7 @@ import qualified Cardano.Ledger.Alonzo.Genesis as Ledger
 import qualified Cardano.Ledger.Api as Ledger
 import qualified Cardano.Ledger.Plutus as Ledger
 import qualified Data.Aeson as Json
+import qualified Data.Aeson.Key as Key
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -120,14 +123,19 @@ mkSystemStart =
 
 -- | Look up a genesis file setting of the node configuration. Since
 -- cardano-node 11.2.0, the setting sits in the @Protocol@ section under
--- @Configuration@. The node also accepts it loose under @Configuration@, or at
--- the top level as before.
+-- @Configuration@, or in the @Testing@ section for the Dijkstra genesis. The
+-- node also accepts it loose under @Configuration@, or at the top level as
+-- before.
 lookupNodeConfig :: Key -> Json.Value -> Maybe Text
 lookupNodeConfig k nodeConfig = asum
-    [ nodeConfig ^? key "Configuration" . key "Protocol" . key k . _String
+    [ nodeConfig ^? key "Configuration" . key section . key k . _String
     , nodeConfig ^? key "Configuration" . key k . _String
     , nodeConfig ^? key k . _String
     ]
+  where
+    section
+        | k == "DijkstraGenesisFile" = "Testing"
+        | otherwise = "Protocol"
 
 readByronGenesis :: MonadIO m => FilePath -> m (GenesisConfig ByronEra)
 readByronGenesis configFile = do
@@ -226,16 +234,24 @@ readAlonzoGenesis configFile = do
 
 
 readConwayGenesis :: MonadIO m => FilePath -> m (Either Text (GenesisConfig ConwayEra))
-readConwayGenesis configFile = do
+readConwayGenesis =
+    readGenesis "ConwayGenesisFile"
+
+readDijkstraGenesis :: MonadIO m => FilePath -> m (Either Text (GenesisConfig DijkstraEra))
+readDijkstraGenesis =
+    readGenesis "DijkstraGenesisFile"
+
+readGenesis :: (MonadIO m, FromJSON genesis) => Key -> FilePath -> m (Either Text genesis)
+readGenesis genesisKey configFile = do
     parseConfigResult <- liftIO $ Yaml.decodeFileEither @Json.Value configFile
     case parseConfigResult of
         Left e -> do
             pure $ Left $
                 "Invalid (non-JSON or non-YAML) or missing node's configuration file: " <> formatParseException e
         Right nodeConfig ->
-            case lookupNodeConfig "ConwayGenesisFile" nodeConfig of
+            case lookupNodeConfig genesisKey nodeConfig of
                 Nothing ->
-                    pure $ Left "Missing 'ConwayGenesisFile' from node's configuration."
+                    pure $ Left $ "Missing '" <> Key.toText genesisKey <> "' from node's configuration."
                 Just (toString -> genesisFile) -> do
                     parseGenesisResult <- liftIO $ Yaml.decodeFileEither (replaceFileName configFile genesisFile)
                     pure $ left

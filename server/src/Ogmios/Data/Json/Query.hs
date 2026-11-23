@@ -150,6 +150,9 @@ import Cardano.Ledger.Conway.Governance (
     GovActionState (..),
     Voter (..),
  )
+import Cardano.Ledger.Dijkstra.Genesis (
+    DijkstraGenesis,
+ )
 import Cardano.Ledger.Hashes (
     unsafeMakeSafeHash,
  )
@@ -441,12 +444,14 @@ data AdHocQuery result where
     GetShelleyGenesis :: AdHocQuery (GenesisConfig ShelleyEra)
     GetAlonzoGenesis :: AdHocQuery (GenesisConfig AlonzoEra)
     GetConwayGenesis :: AdHocQuery (GenesisConfig ConwayEra)
+    GetDijkstraGenesis :: AdHocQuery (GenesisConfig DijkstraEra)
 
 type family GenesisConfig (era :: Type) :: Type where
     GenesisConfig ByronEra = Byron.GenesisData
     GenesisConfig ShelleyEra = ShelleyGenesis
     GenesisConfig AlonzoEra = AlonzoGenesis
     GenesisConfig ConwayEra = ConwayGenesis
+    GenesisConfig DijkstraEra = DijkstraGenesis
 
 instance FromJSON (Query Proxy (CardanoBlock StandardCrypto)) where
     parseJSON json =
@@ -502,7 +507,7 @@ instance FromJSON (Query Proxy (CardanoBlock StandardCrypto)) where
                     "Network/blockHeight" ->
                         parseQueryNetworkBlockHeight id queryParams
                     "Network/genesisConfiguration" ->
-                        parseQueryNetworkGenesisConfiguration (Proxy, Proxy, Proxy, Proxy) queryParams
+                        parseQueryNetworkGenesisConfiguration (Proxy, Proxy, Proxy, Proxy, Proxy) queryParams
                     "Network/startTime" ->
                         parseQueryNetworkStartTime id queryParams
                     "Network/tip" ->
@@ -2132,10 +2137,11 @@ parseQueryNetworkGenesisConfiguration ::
     , f (GenesisConfig ShelleyEra)
     , f (GenesisConfig AlonzoEra)
     , f (GenesisConfig ConwayEra)
+    , f (GenesisConfig DijkstraEra)
     ) ->
     Json.Value ->
     Json.Parser (QueryInEra f (CardanoBlock crypto))
-parseQueryNetworkGenesisConfiguration (genByron, genShelley, genAlonzo, genConway) =
+parseQueryNetworkGenesisConfiguration (genByron, genShelley, genAlonzo, genConway, genDijkstra) =
     Json.withObject "genesisConfiguration" $ \obj -> do
         era <- obj .: "era"
         case T.toLower era of
@@ -2171,10 +2177,18 @@ parseQueryNetworkGenesisConfiguration (genByron, genShelley, genAlonzo, genConwa
                         GetConwayGenesis
                         Conway.encodeGenesis
                         (const genConway)
+            "dijkstra" -> do
+                pure
+                    $ const
+                    $ Just
+                    $ SomeAdHocQuery
+                        GetDijkstraGenesis
+                        Dijkstra.encodeGenesis
+                        (const genDijkstra)
             (_unknownEra :: Text) -> do
                 fail
                     "Invalid era parameter. Only 'byron', 'shelley', \
-                    \'alonzo' and 'conway' have a genesis configuration."
+                    \'alonzo', 'conway' and 'dijkstra' have a genesis configuration."
 
 parseQueryLedgerStakePoolsPerformances ::
     forall crypto f.
