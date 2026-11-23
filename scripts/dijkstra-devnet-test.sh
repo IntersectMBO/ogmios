@@ -122,10 +122,7 @@ wait_for 300 cli query tip || fail "the node does not answer"
 echo "Waiting for the Dijkstra era."
 wait_for 600 in_dijkstra || fail "the chain did not reach the Dijkstra era"
 
-# Ogmios wants one flat node configuration. cardano-testnet writes it in sections.
-jq '.Configuration | reduce to_entries[] as $e ({}; if ($e.value | type) == "object" then . + $e.value else . + {($e.key): $e.value} end)' \
-  "$WORK/env/configuration.yaml" > "$WORK/env/node-config.json"
-"$OGMIOS_BIN" --node-socket "$SOCKET" --node-config "$WORK/env/node-config.json" \
+"$OGMIOS_BIN" --node-socket "$SOCKET" --node-config "$WORK/env/configuration.yaml" \
   --host 127.0.0.1 --port 1337 > "$WORK/ogmios.log" 2>&1 &
 PIDS+=($!)
 wait_for 120 ogmios_connected || fail "Ogmios did not connect to the node"
