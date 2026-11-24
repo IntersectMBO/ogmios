@@ -118,10 +118,10 @@ mkSystemStart =
   where
     toPicoResolution = (*1000000000000)
 
--- | Look up a genesis file setting of the node configuration, where
--- cardano-node looks for it. Since cardano-node 11.2.0, the setting sits in the
--- @Protocol@ section under @Configuration@. The node also accepts it loose
--- under @Configuration@, or at the top level as before.
+-- | Look up a genesis file setting of the node configuration. Since
+-- cardano-node 11.2.0, the setting sits in the @Protocol@ section under
+-- @Configuration@. The node also accepts it loose under @Configuration@, or at
+-- the top level as before.
 lookupNodeConfig :: Key -> Json.Value -> Maybe Text
 lookupNodeConfig k nodeConfig = asum
     [ nodeConfig ^? key "Configuration" . key "Protocol" . key k . _String
