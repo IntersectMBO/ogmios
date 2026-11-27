@@ -28,6 +28,8 @@ math: true
 
 - `queryNetwork/genesisConfiguration` accepts `"era": "dijkstra"`. It returns the initial values of the protocol parameters new in the Dijkstra era, read from the Dijkstra genesis file of the node configuration: reference-script limits and pricing, maximum pledge leverage, minimum pool margin, the PlutusV4 cost model, reference-input costs, and the Leios and Peras parameters.
 
+- The `guard` clause of Dijkstra native scripts now has an `origin` field, `"verificationKey"` or `"script"`, which tells what kind of credential `from` holds. Before, a clause only had the hash in `from`, so a key hash and a script hash looked the same. When `evaluateTransaction` reads a native script in `additionalUtxo`, a `guard` clause with no `origin` is still read as a script hash.
+
 #### Changed
 
 - **⚠️ BREAKING-CHANGE ⚠️**: Ogmios now requires node-to-client version 23, which cardano-node 10.7.1 and later offer. A cardano-node that does not offer it is refused at the handshake. Ogmios then stops with an error that lists the node-to-client versions the cardano-node offers and the versions Ogmios supports, instead of a raw handshake protocol error.

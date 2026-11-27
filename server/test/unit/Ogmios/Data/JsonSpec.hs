@@ -109,6 +109,7 @@ import Ogmios.Data.Json.Prelude (
 import Ogmios.Data.Json.Query (
     QueryInEra,
     SomeQuery (..),
+    decodeDijkstraNativeScript,
     decodeNativeScript,
     parseQueryLedgerConstitution,
     parseQueryLedgerConstitutionalCommittee,
@@ -273,6 +274,7 @@ import Test.Hspec (
     runIO,
     shouldBe,
     shouldContain,
+    shouldSatisfy,
     specify,
  )
 import Test.Hspec.Json.Schema (
@@ -515,6 +517,27 @@ spec = do
                     fail (show e)
                 Json.Success{} ->
                     pure ()
+
+        specify "Dijkstra native script: guard clause origin" $ do
+            let hash = "00000000000000000000000000000000000000000000000000000000" :: Text
+                decodeGuard origin =
+                    Json.parse decodeDijkstraNativeScript $ Json.object
+                        $ ["clause" .= ("guard" :: Text), "from" .= hash]
+                        <> maybe [] (\o -> ["origin" .= (o :: Text)]) origin
+                isKey :: Json.Result (Ledger.NativeScript DijkstraEra) -> Bool
+                isKey = \case
+                    Json.Success (Di.RequireGuard Ledger.KeyHashObj{}) -> True
+                    _ -> False
+                isScript :: Json.Result (Ledger.NativeScript DijkstraEra) -> Bool
+                isScript = \case
+                    Json.Success (Di.RequireGuard Ledger.ScriptHashObj{}) -> True
+                    _ -> False
+            decodeGuard (Just "verificationKey") `shouldSatisfy` isKey
+            decodeGuard (Just "script") `shouldSatisfy` isScript
+            decodeGuard Nothing `shouldSatisfy` isScript
+            decodeGuard (Just "unknown") `shouldSatisfy` \case
+                Json.Error msg -> "unknown" `T.isInfixOf` toText msg
+                Json.Success{} -> False
 
         specify "Golden: SubmitTransactionFailure<3133>" $ do
             json <- decodeFileThrow "SubmitTransactionFailure_1.json"

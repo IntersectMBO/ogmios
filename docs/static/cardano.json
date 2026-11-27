@@ -2742,7 +2742,7 @@
       , { "type": "object"
         , "title": "Clause<Guard>"
         , "additionalProperties": false
-        , "required": [ "clause", "from" ]
+        , "required": [ "clause", "from", "origin" ]
         , "properties":
           { "clause":
             { "type": "string"
@@ -2750,6 +2750,9 @@
             }
           , "from":
             { "$ref": "cardano.json#/definitions/Digest<Blake2b, 224>"
+            }
+          , "origin":
+            { "$ref": "cardano.json#/definitions/CredentialOrigin"
             }
           }
         }

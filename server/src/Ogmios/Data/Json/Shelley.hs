@@ -215,6 +215,13 @@ encodeCredentialRaw x = case x of
     Ledger.KeyHashObj h -> encodeKeyHash h
     Ledger.ScriptHashObj h -> encodeScriptHash h
 
+encodeCredentialOrigin ::
+    Ledger.Credential any ->
+    Json
+encodeCredentialOrigin x = case x of
+    Ledger.KeyHashObj{} -> encodeText "verificationKey"
+    Ledger.ScriptHashObj{} -> encodeText "script"
+
 encodeTxCerts ::
     StrictSeq (Sh.ShelleyTxCert era) ->
     ([Series], [Json])

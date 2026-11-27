@@ -410,6 +410,8 @@ encodeNativeScript = encodeObject . go . getMemoRawType
                 .= encodeText "guard"
                 <> "from"
                 .= Shelley.encodeCredentialRaw cred
+                <> "origin"
+                .= Shelley.encodeCredentialOrigin cred
 
 encodeScript ::
     forall era.
