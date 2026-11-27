@@ -3041,7 +3041,12 @@ decodeDijkstraNativeScript value =
             clause <- o .: "clause"
             case clause :: Text of
                 "guard" -> do
-                    from <- o .: "from" >>= decodeStakingCredential decodeAsScriptHash
+                    origin <- o .:? "origin" .!= ("script" :: Text)
+                    decodeAsOrigin <- case origin of
+                        "verificationKey" -> pure decodeAsKeyHash
+                        "script" -> pure decodeAsScriptHash
+                        _ -> fail ("Unknown guard origin: " <> toString origin)
+                    from <- o .: "from" >>= decodeStakingCredential decodeAsOrigin
                     pure (Ledger.Dijkstra.RequireGuard (coerceKeyRole from))
                 _ ->
                     decodeNativeScriptWith decodeDijkstraNativeScript value

@@ -435,9 +435,9 @@ asNumbers :: Json.Value -> Json.Value
 asNumbers = \case
     Json.Number n ->
         Json.toJSON (realToFrac n :: Double)
-    Json.String (T.splitOn "/" -> [numerator, denominator])
-        | Just n <- readMaybe @Double (toString numerator)
-        , Just d <- readMaybe @Double (toString denominator) ->
+    Json.String (T.splitOn "/" -> [top, bottom])
+        | Just n <- readMaybe @Double (toString top)
+        , Just d <- readMaybe @Double (toString bottom) ->
             Json.toJSON (n / d)
     Json.Array xs ->
         Json.Array (asNumbers <$> xs)

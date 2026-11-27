@@ -54,6 +54,7 @@ export type ScriptNative =
  * A Blake2b 28-byte hash digest, encoded in base16.
  */
 export type DigestBlake2B224 = string;
+export type CredentialOrigin = "verificationKey" | "script";
 export type Certificate =
   | StakeDelegation
   | StakeCredentialRegistration
@@ -66,7 +67,6 @@ export type Certificate =
   | DelegateRepresentativeRegistration
   | DelegateRepresentativeUpdate
   | DelegateRepresentativeRetirement;
-export type CredentialOrigin = "verificationKey" | "script";
 /**
  * A Blake2b 28-byte hash digest of a pool's verification key.
  */
@@ -707,6 +707,7 @@ export interface ClauseSignature {
 export interface ClauseGuard {
   clause: "guard";
   from: DigestBlake2B224;
+  origin: CredentialOrigin;
 }
 export interface ClauseAny {
   clause: "any";
